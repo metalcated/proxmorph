@@ -7,6 +7,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+### Added
+- **Proxmox VE 9.2.6+ compatibility preflight**: validates the package version and every patched runtime contract (`proxmoxlib.js` theme map, index loader/insertion point, and `Nodes.pm` sensor anchor) before modifying Proxmox-owned files. Future versions with unchanged contracts remain supported; changed layouts fail closed.
+- **Inventory View for PVE**: adds an optional node → resource pool → guest hierarchy to the native view selector, plus a modal for showing or hiding VMs, containers, templates, storage, SDN/network resources, stopped guests, and pool grouping. Includes expand/collapse actions and uses no new browser-local persistence.
+
+### Changed
+- Bumped the installer version to 2.9.0.
+
+### Fixed
+- **PDM Catppuccin Frappé and Macchiato**: restored the missing dark-mode semantic selector so their surface variables are valid CSS and apply on Proxmox Datacenter Manager.
+
 ## [2.8.1] - 2026-07-19
 
 ### Added

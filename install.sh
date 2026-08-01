@@ -15,7 +15,7 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Configuration
-VERSION="2.8.1"
+VERSION="2.9.0"
 WIDGET_TOOLKIT_DIR="/usr/share/javascript/proxmox-widget-toolkit"
 THEMES_DIR="${WIDGET_TOOLKIT_DIR}/themes"
 PROXMOXLIB_JS="${WIDGET_TOOLKIT_DIR}/proxmoxlib.js"
@@ -32,6 +32,7 @@ SENSORS_PATCH_MARKER="# ProxMorph Sensors"
 # PVE-specific paths
 PVE_MANAGER_DIR="/usr/share/pve-manager"
 PVE_INDEX_TPL="${PVE_MANAGER_DIR}/index.html.tpl"
+PVE_MANAGER_JS="${PVE_MANAGER_DIR}/js/pvemanagerlib.js"
 PVE_JS_PATCHES_DIR="${PVE_MANAGER_DIR}/js/proxmorph"
 PVE_SERVICE="pveproxy"
 
@@ -139,6 +140,103 @@ check_product() {
     esac
 }
 
+# Validate the installed product by the files and source-level extension points
+# ProxMorph actually patches. This is intentionally capability-based so future
+# package versions can proceed when their layout remains compatible, while a
+# changed contract fails before any package-owned file is edited.
+validate_runtime_contracts() {
+    local errors=0
+    local package_version=""
+
+    print_info "Checking ${PRODUCT} runtime compatibility..."
+
+    case "$PRODUCT" in
+        PVE)
+            package_version=$(dpkg-query -W -f='${Version}' pve-manager 2>/dev/null || true)
+            if [[ -n "$package_version" ]] && dpkg --compare-versions "$package_version" lt "8"; then
+                print_error "Unsupported pve-manager version: ${package_version} (requires 8.x or newer)"
+                errors=$((errors + 1))
+            elif [[ -n "$package_version" ]] && dpkg --compare-versions "$package_version" ge "9.2.6"; then
+                print_status "pve-manager ${package_version} is in the Proxmox 9.2.6+ compatibility range"
+            elif [[ -n "$package_version" ]]; then
+                print_info "pve-manager ${package_version} uses the legacy supported range; validating contracts"
+            fi
+            ;;
+        PBS)
+            package_version=$(dpkg-query -W -f='${Version}' proxmox-backup-server 2>/dev/null || true)
+            ;;
+        PDM)
+            package_version=$(dpkg-query -W -f='${Version}' proxmox-datacenter-manager-ui 2>/dev/null || true)
+            ;;
+    esac
+
+    if [[ ! -f "$INDEX_TEMPLATE" ]]; then
+        print_error "Required index template not found: ${INDEX_TEMPLATE}"
+        errors=$((errors + 1))
+    else
+        if ! grep -q '</head>' "$INDEX_TEMPLATE"; then
+            print_error "Index template has no </head> insertion point: ${INDEX_TEMPLATE}"
+            errors=$((errors + 1))
+        fi
+        if [[ "$PRODUCT" != "PDM" ]] && ! grep -q '</body>' "$INDEX_TEMPLATE"; then
+            print_error "Index template has no </body> insertion point: ${INDEX_TEMPLATE}"
+            errors=$((errors + 1))
+        fi
+    fi
+
+    if [[ "$PRODUCT" != "PDM" ]]; then
+        if [[ ! -f "$PROXMOXLIB_JS" ]]; then
+            print_error "Required widget toolkit file not found: ${PROXMOXLIB_JS}"
+            errors=$((errors + 1))
+        else
+            local theme_anchor_count
+            theme_anchor_count=$(grep -cF 'theme_map: {' "$PROXMOXLIB_JS" 2>/dev/null || true)
+            if [[ "$theme_anchor_count" -ne 1 ]]; then
+                print_error "Expected one theme_map anchor in ${PROXMOXLIB_JS}; found ${theme_anchor_count}"
+                errors=$((errors + 1))
+            fi
+        fi
+    fi
+
+    if [[ "$PRODUCT" == "PVE" ]]; then
+        if ! grep -q '/pve2/js/pvemanagerlib.js' "$INDEX_TEMPLATE" 2>/dev/null; then
+            print_error "PVE manager JavaScript loader was not found in ${INDEX_TEMPLATE}"
+            errors=$((errors + 1))
+        fi
+        if [[ ! -f "$PVE_MANAGER_JS" ]]; then
+            print_error "PVE manager JavaScript bundle not found: ${PVE_MANAGER_JS}"
+            errors=$((errors + 1))
+        else
+            local pve_ui_contract
+            for pve_ui_contract in 'PVE.form.ViewSelector' 'PVE.tree.ResourceTree' 'PVE.node.StatusView'; do
+                if ! grep -qF "$pve_ui_contract" "$PVE_MANAGER_JS"; then
+                    print_error "Required PVE UI extension point not found: ${pve_ui_contract}"
+                    errors=$((errors + 1))
+                fi
+            done
+        fi
+        if [[ ! -f "$NODES_PM" ]]; then
+            print_error "PVE node API file not found: ${NODES_PM}"
+            errors=$((errors + 1))
+        else
+            local sensor_anchor_count
+            sensor_anchor_count=$(grep -cE '^[[:space:]]*my \$dinfo = df' "$NODES_PM" 2>/dev/null || true)
+            if [[ "$sensor_anchor_count" -ne 1 ]]; then
+                print_error "Expected one sensor insertion anchor in ${NODES_PM}; found ${sensor_anchor_count}"
+                errors=$((errors + 1))
+            fi
+        fi
+    fi
+
+    if [[ "$errors" -ne 0 ]]; then
+        print_error "Compatibility check failed; no Proxmox files were changed"
+        return 1
+    fi
+
+    print_status "Runtime file contracts are compatible${package_version:+ (${package_version})}"
+    return 0
+}
+
 # Get latest release version from GitHub
 get_latest_version() {
     curl -s "https://api.github.com/repos/${GITHUB_REPO}/releases/latest" | \
@@ -155,6 +253,25 @@ get_latest_version() {
 verify_checksum() {
     local dir="$1"
     local sums="${2:-SHA256SUMS}"
+
+    [[ -f "${dir}/${sums}" ]] || return 1
+
+    local line=""
+    local candidate=""
+    local listed_present=false
+    while IFS= read -r line; do
+        if [[ "$line" =~ ^[[:xdigit:]]{64}[[:space:]][\ \*](.+)$ ]]; then
+            candidate="${BASH_REMATCH[1]}"
+            case "$candidate" in
+                /*|../*|*/../*|*/..) return 1 ;;
+            esac
+            if [[ -f "${dir}/${candidate}" ]]; then
+                listed_present=true
+            fi
+        fi
+    done < "${dir}/${sums}"
+
+    [[ "$listed_present" == "true" ]] || return 1
     ( cd "$dir" && sha256sum --ignore-missing -c "$sums" )
 }
 
@@ -299,6 +416,13 @@ patch_theme_map() {
         print_info "Theme '${theme_key}' already registered"
         return 0
     fi
+
+    local theme_anchor_count
+    theme_anchor_count=$(grep -cF 'theme_map: {' "$PROXMOXLIB_JS" 2>/dev/null || true)
+    if [[ "$theme_anchor_count" -ne 1 ]]; then
+        print_error "Cannot safely register ${theme_title}: expected one theme_map anchor, found ${theme_anchor_count}"
+        return 1
+    fi
     
     # Add theme to theme_map
     sed -i "s/theme_map: {/theme_map: {\n\t\"${theme_key}\": \"${theme_title}\",/" "$PROXMOXLIB_JS"
@@ -363,6 +487,10 @@ install_js_patches() {
     
     # Patch index template to load JS files
     if [[ -f "$INDEX_TEMPLATE" ]]; then
+        if ! grep -q '</body>' "$INDEX_TEMPLATE"; then
+            print_error "Cannot install JavaScript patches: no </body> insertion point in ${INDEX_TEMPLATE}"
+            return 1
+        fi
         # If already patched, remove old block so we re-generate with current file list
         if grep -q "$JS_PATCH_MARKER" "$INDEX_TEMPLATE"; then
             local escaped_start_jp=$(printf '%s\n' "$JS_PATCH_MARKER" | sed 's/[]\/$*.^[]/\\&/g')
@@ -683,6 +811,7 @@ INSTALL_DIR="${INSTALL_DIR}"
 PROXMOXLIB_JS="${PROXMOXLIB_JS}"
 WIDGET_TOOLKIT_DIR="${WIDGET_TOOLKIT_DIR}"
 INDEX_TEMPLATE="${INDEX_TEMPLATE}"
+PVE_MANAGER_JS="${PVE_MANAGER_JS}"
 JS_PATCHES_DIR="${JS_PATCHES_DIR}"
 PROXY_SERVICE="${PROXY_SERVICE}"
 LOG_FILE="/var/log/proxmorph.log"
@@ -744,6 +873,51 @@ if [ "\$PRODUCT" != "PDM" ] && [ -f "\$DEFAULT_THEME_FILE" ] && ! grep -q "\$DEF
 fi
 
 if [ "\$needs_repatch" = "true" ]; then
+    # Re-run the same capability checks after a package update. If Proxmox has
+    # changed a patch point, leave the new package files untouched and log the
+    # exact incompatible contract for the administrator.
+    compatibility_error=""
+    if [ ! -f "\$INDEX_TEMPLATE" ]; then
+        compatibility_error="missing index template: \$INDEX_TEMPLATE"
+    elif ! grep -q '</head>' "\$INDEX_TEMPLATE" 2>/dev/null; then
+        compatibility_error="missing </head> insertion point in \$INDEX_TEMPLATE"
+    elif [ "\$PRODUCT" != "PDM" ] && ! grep -q '</body>' "\$INDEX_TEMPLATE" 2>/dev/null; then
+        compatibility_error="missing </body> insertion point in \$INDEX_TEMPLATE"
+    fi
+
+    if [ -z "\$compatibility_error" ] && [ "\$PRODUCT" != "PDM" ]; then
+        theme_anchor_count=\$(grep -cF 'theme_map: {' "\$PROXMOXLIB_JS" 2>/dev/null || true)
+        if [ "\$theme_anchor_count" -ne 1 ]; then
+            compatibility_error="expected one theme_map anchor, found \$theme_anchor_count"
+        fi
+    fi
+
+    if [ -z "\$compatibility_error" ] && [ "\$PRODUCT" = "PVE" ]; then
+        if [ ! -f "\$PVE_MANAGER_JS" ]; then
+            compatibility_error="missing PVE manager JavaScript bundle: \$PVE_MANAGER_JS"
+        else
+            for pve_ui_contract in 'PVE.form.ViewSelector' 'PVE.tree.ResourceTree' 'PVE.node.StatusView'; do
+                if ! grep -qF "\$pve_ui_contract" "\$PVE_MANAGER_JS"; then
+                    compatibility_error="missing PVE UI extension point: \$pve_ui_contract"
+                    break
+                fi
+            done
+        fi
+    fi
+
+    if [ -z "\$compatibility_error" ] && [ "\$PRODUCT" = "PVE" ] && [ -f "\${INSTALL_DIR}/.sensors-enabled" ]; then
+        nodes_pm="/usr/share/perl5/PVE/API2/Nodes.pm"
+        sensor_anchor_count=\$(grep -cE '^[[:space:]]*my \\\$dinfo = df' "\$nodes_pm" 2>/dev/null || true)
+        if [ "\$sensor_anchor_count" -ne 1 ]; then
+            compatibility_error="expected one Nodes.pm sensor anchor, found \$sensor_anchor_count"
+        fi
+    fi
+
+    if [ -n "\$compatibility_error" ]; then
+        log "ERROR: Proxmox update is not compatible with the installed ProxMorph patch set: \$compatibility_error. No files changed."
+        exit 0
+    fi
+
     log "Detected \$PRODUCT update, re-applying ProxMorph patches..."
 
     if [ "\$PRODUCT" = "PDM" ]; then
@@ -1239,6 +1413,13 @@ patch_nodes_pm() {
         return 1
     fi
 
+    local sensor_anchor_count
+    sensor_anchor_count=$(grep -cE '^[[:space:]]*my \$dinfo = df' "$NODES_PM" 2>/dev/null || true)
+    if [[ "$sensor_anchor_count" -ne 1 ]]; then
+        print_error "Cannot safely patch Nodes.pm: expected one status-filesystem anchor, found ${sensor_anchor_count}"
+        return 1
+    fi
+
     # Refresh legacy sensor patches so old installs get the taint-safe logic.
     if grep -q "$SENSORS_PATCH_MARKER" "$NODES_PM" 2>/dev/null; then
           if grep -q "local \$ENV{PATH} = '/usr/bin:/bin';" "$NODES_PM" 2>/dev/null && \
@@ -1609,6 +1790,10 @@ install_themes() {
     fi
     
     print_info "Found $theme_count theme(s)"
+
+    # Fail before backups, copies, or package-file edits when an update has
+    # changed one of the source contracts ProxMorph relies on.
+    validate_runtime_contracts
     
     # Backup original files
     backup_files
@@ -1932,9 +2117,10 @@ show_menu() {
     echo "  6) Show status"
     [[ "$PRODUCT" == "PVE" ]] && echo "  7) Manage sensors"
     echo "  8) Set default theme (server-side)"
+    echo "  9) Verify Proxmox compatibility"
     echo "  0) Exit"
     echo ""
-    read -p "Enter choice [0-8]: " choice
+    read -p "Enter choice [0-9]: " choice
 
     case $choice in
         1) install_themes ;;
@@ -1950,6 +2136,7 @@ show_menu() {
             read -p "Enter theme key (or 'none' to clear, empty to cancel): " dt_key
             [[ -n "$dt_key" ]] && manage_default_theme "$dt_key"
             ;;
+        9) validate_runtime_contracts ;;
         0) exit 0 ;;
         *) print_error "Invalid option" ; show_menu ;;
     esac
@@ -1957,6 +2144,14 @@ show_menu() {
 
 # Parse command line arguments
 main() {
+    # Compatibility is read-only and should be usable by an unprivileged
+    # administrator before deciding whether to install anything as root.
+    if [[ "${1:-}" == "compatibility" ]]; then
+        check_product
+        validate_runtime_contracts
+        return
+    fi
+
     check_root
     check_product
     

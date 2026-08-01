@@ -55,6 +55,13 @@ rm -f "${work}/SHA256SUMS"
 verify_checksum "$work" SHA256SUMS >/dev/null 2>&1; rc=$?
 check "missing manifest fails" 1 "$rc"
 
+# 6. Manifest paths may not escape or traverse the release directory.
+mkdir -p "${work}/nested"
+hash=$(sha256sum "${work}/${arch}" | awk '{print $1}')
+echo "${hash}  nested/../${arch}" > "${work}/SHA256SUMS"
+verify_checksum "$work" SHA256SUMS >/dev/null 2>&1; rc=$?
+check "traversing manifest path rejected" 1 "$rc"
+
 echo ""
 if [[ "$fail" -eq 0 ]]; then echo "ALL PASS"; else echo "FAILURES PRESENT"; fi
 exit "$fail"

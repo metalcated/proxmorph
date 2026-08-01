@@ -8,6 +8,7 @@ Custom themes for Proxmox VE (PVE), Proxmox Backup Server (PBS), and Proxmox Dat
 - **Auto-Patch on Updates** - Automatically re-applies themes after product updates
 - **Hybrid Engine** - CSS for styling + JavaScript for dynamic chart patching
 - **Hardware Sensor Monitoring** - Optional CPU/storage temps, fan speeds, and UPS status on node Summary dashboard (PVE)
+- **Inventory View** - Optional node → resource pool → guest hierarchy with modal visibility controls (PVE)
 - **Easy Installation** - Single command installation for PVE, PBS, and PDM
 
 ## 📸 Screenshot
@@ -139,7 +140,23 @@ Checksum verification still runs, against your mirrored `SHA256SUMS`.
 | `./install.sh update` or `bash <(curl -fsSL https://raw.githubusercontent.com/IT-BAER/proxmorph/main/install.sh) update` | Updates (latest from GitHub) and install the latest themes |
 | `./install.sh status` | Show installation status |
 | `./install.sh default-theme <key\|none>` | Set a server-side default theme for new browsers (user choice always wins) |
+| `./install.sh compatibility` | Verify the installed Proxmox version and every source-level patch point before installation |
 | `./install.sh` | Shows Menu to manage|
+
+## 🗂️ Inventory View (PVE)
+
+ProxMorph adds an optional **Inventory View** to the resource-tree selector. It keeps Proxmox's native records, permissions, navigation, and resource pools, while presenting guests as:
+
+```text
+Datacenter
+└── Node
+    └── Resource Pool
+        └── VM or Container
+```
+
+Click the sitemap button next to the native Tree Settings gear to show or hide virtual machines, containers, templates, storage, SDN/network resources, stopped guests, and pool nesting. The same modal includes **Expand all** and **Collapse all** actions.
+
+The visibility choices are intentionally scoped to the current page and are not written to browser storage. The hierarchy itself comes from the resource pools already configured in Proxmox; slash-delimited pools follow Proxmox's native **Nest Pools** tree setting.
 
 ## 🔍 What the installer changes on your system
 
@@ -148,6 +165,7 @@ Run as root, `install.sh` makes only these changes, all reversible with `./insta
 - **Themes:** copies `theme-*.css` into the product's widget-toolkit themes directory.
 - **Theme registration:** `sed`-patches the `theme_map` in `proxmoxlib.js` so the themes appear in the native Color Theme selector.
 - **Index template:** injects `<script>` / `<link>` tags into the product index template for the JS patches and (PDM) theme links.
+- **Compatibility preflight:** validates the installed package version, template insertion points, theme map, PVE UI loader, and sensor anchor before modifying package-owned files.
 - **Persistence:** installs an APT hook at `/etc/apt/apt.conf.d/99proxmorph` that runs `/opt/proxmorph/post-update.sh` to re-apply the patches after a Proxmox update. The hook re-patches from the local `/opt/proxmorph` copy only; it downloads nothing.
 - **Sensors (PVE, optional):** if you enable sensor display, edits `Nodes.pm` to expose `lm-sensors` data.
 
@@ -204,9 +222,11 @@ See [Issue #13](https://github.com/IT-BAER/proxmorph/issues/13) for more details
 
 ## 📦 Supported Versions
 
-- Proxmox VE 9.x / 8.x
+- Proxmox VE 9.2.6+ (source-verified), plus 9.x / 8.x when the runtime compatibility preflight passes
 - Proxmox Backup Server 4.x / 3.x
 - Proxmox Datacenter Manager 1.x
+
+Future Proxmox releases are accepted based on the source contracts ProxMorph actually uses. If Proxmox moves or removes one of those integration points, installation fails before changing package files instead of applying a partial patch.
 
 ## 📄 License
 
