@@ -13,6 +13,7 @@ let navigationStyle;
 let rootText = 'Datacenter';
 let routedContent;
 const apiRequests = [];
+const documentClasses = new Set();
 const definedClasses = {};
 const nativeDatacenterMenuItem = { text: 'Bulk Start', itemId: 'bulkstart' };
 const nativeNodeMenuItem = { text: 'Create VM', itemId: 'createvm' };
@@ -241,13 +242,25 @@ const formValues = {
     showStorage: false,
     showNetwork: true,
     showStoppedGuests: false,
+    uiFont: 'modern',
+    uiTextSize: 'comfortable',
 };
 
 // Mirrors the native Workspace listener that applies the selector's view to
 // the existing PVE resource tree.
 selector.on('select', (combo) => tree.setViewFilter(combo.getViewFilter()));
 
-global.window = { location: { hostname: 'pve.gnet.com' } };
+global.window = {
+    location: { hostname: 'pve.gnet.com' },
+    document: {
+        documentElement: {
+            classList: {
+                add: (className) => documentClasses.add(className),
+                remove: (className) => documentClasses.delete(className),
+            },
+        },
+    },
+};
 global.PVE = {};
 global.Proxmox = {
     Utils: {
@@ -272,6 +285,8 @@ global.Proxmox = {
                             showStorage: false,
                             showNetwork: false,
                             showStoppedGuests: true,
+                            uiFont: 'default',
+                            uiTextSize: 'default',
                         },
                     },
                 });
@@ -340,11 +355,16 @@ assert.deepEqual(records, [
     { key: 'proxmorph-connectivity', value: 'Connectivity View' },
 ]);
 assert.equal(settingsButton.itemId, 'proxmorphInventorySettings');
-assert.equal(settingsButton.tooltip, 'Inventory visibility settings');
+assert.equal(settingsButton.tooltip, 'Inventory and appearance settings');
 assert.equal(navigation.itemId, 'proxmorphViewNavigation');
 assert.equal(navigation.hidden, true, 'icon navigation is opt-in');
 assert.equal(selector.hidden, false, 'native picker remains visible by default');
 assert.equal(navigationStyle.id, 'proxmorph-inventory-navigation-style');
+assert.deepEqual(
+    [...documentClasses].sort(),
+    ['proxmorph-font-default', 'proxmorph-text-default'],
+    'saved typography classes are applied when the account preferences load',
+);
 assert.match(
     navigationStyle.css,
     /\.pmx-view-nav-button\.x-btn\.x-btn-default-toolbar-small\.x-btn-pressed[^{]*\{[^}]*background-color: transparent !important;/s,
@@ -430,7 +450,7 @@ assert.equal(nodeRecord.isExpanded(), true);
 
 settingsButton.handler();
 assert.equal(settingsWindow.config.modal, true, 'settings use an in-app modal');
-assert.equal(settingsWindow.config.width, 600, 'settings modal has room for compact columns');
+assert.equal(settingsWindow.config.width, 640, 'settings modal has room for appearance controls');
 const settingsFormConfig = settingsWindow.config.items[0].config;
 const settingsItems = flattenConfigItems(settingsFormConfig.items);
 assert.ok(
@@ -440,6 +460,14 @@ assert.ok(
 assert.ok(
     settingsItems.some((item) => item.name === 'groupByNode'),
     'settings modal exposes the hierarchy option',
+);
+assert.ok(
+    settingsItems.some((item) => item.name === 'uiFont'),
+    'settings modal exposes the interface font option',
+);
+assert.ok(
+    settingsItems.some((item) => item.name === 'uiTextSize'),
+    'settings modal exposes the text-size option',
 );
 const stoppedGuestsControl = settingsItems.find(
     (item) => item.itemId === 'proxmorphShowStoppedGuests',
@@ -464,7 +492,7 @@ assert.ok(
 );
 assert.deepEqual(
     settingsFormConfig.items.map((item) => item.title),
-    ['Navigation', 'Hierarchy', 'Visible resources', 'Account'],
+    ['Navigation', 'Hierarchy', 'Visible resources', 'Typography', 'Account'],
     'settings are organized into compact task-focused sections',
 );
 assert.equal(
@@ -477,6 +505,11 @@ assert.match(
     /background-color: var\(--pm-bg-surface, var\(--gh-canvas-muted, var\(--pwt-panel-background, transparent\)\)\) !important;/,
     'modal surfaces inherit the active theme tokens',
 );
+assert.match(
+    navigationStyle.css,
+    /--proxmorph-ui-font: "Roboto Flex", "Segoe UI Variable"/,
+    'the modern option uses a native variable-font stack without changing icon fonts',
+);
 
 const applyButton = settingsWindow.config.buttons.find((button) => button.text === 'Apply');
 applyButton.handler();
@@ -486,6 +519,13 @@ assert.equal(apiRequests[1].url, '/proxmorph/preferences');
 assert.equal(apiRequests[1].params.groupByNode, 0);
 assert.equal(apiRequests[1].params.useIconNavigation, 1);
 assert.equal(apiRequests[1].params.showStoppedGuests, 0);
+assert.equal(apiRequests[1].params.uiFont, 'modern');
+assert.equal(apiRequests[1].params.uiTextSize, 'comfortable');
+assert.deepEqual(
+    [...documentClasses].sort(),
+    ['proxmorph-font-modern', 'proxmorph-text-comfortable'],
+    'Apply switches typography immediately after the account save succeeds',
+);
 
 assert.equal(selector.getValue(), 'proxmorph-inventory');
 assert.equal(selector.hidden, true, 'native picker is hidden when icon navigation is enabled');

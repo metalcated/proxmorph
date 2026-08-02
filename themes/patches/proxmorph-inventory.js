@@ -13,7 +13,7 @@
  * protected API and the replicated Proxmox cluster filesystem. The selected
  * view itself continues to use Proxmox's native URL state.
  *
- * Version: 1.6.1
+ * Version: 1.7.0
  */
 (function () {
     'use strict';
@@ -24,7 +24,7 @@
     var CONNECTIVITY_VIEW_KEY = 'proxmorph-connectivity';
     var VNET_TYPE = 'proxmorph-vnet';
     var VNETS_URL = '/cluster/sdn/vnets';
-    var VERSION = '1.6.1';
+    var VERSION = '1.7.0';
     var PREFERENCES_URL = '/proxmorph/preferences';
     var MAX_INIT_ATTEMPTS = 40;
     var initAttempts = 0;
@@ -37,6 +37,21 @@
     var treeContextResourceTree = null;
     var treeContextViewSelector = null;
 
+    var booleanSettingKeys = [
+        'useIconNavigation',
+        'groupByNode',
+        'showPools',
+        'showVirtualMachines',
+        'showContainers',
+        'showTemplates',
+        'showStorage',
+        'showNetwork',
+        'showStoppedGuests',
+    ];
+    var choiceSettings = {
+        uiFont: ['default', 'modern'],
+        uiTextSize: ['default', 'comfortable', 'large'],
+    };
     var defaults = {
         useIconNavigation: false,
         groupByNode: true,
@@ -47,6 +62,8 @@
         showStorage: false,
         showNetwork: false,
         showStoppedGuests: true,
+        uiFont: 'default',
+        uiTextSize: 'default',
     };
 
     var settings = copySettings(defaults);
@@ -59,15 +76,29 @@
         return copy;
     }
 
+    function normalizeBoolean(value) {
+        return (
+            value === true ||
+            value === 1 ||
+            value === '1' ||
+            value === 'true' ||
+            value === 'on'
+        );
+    }
+
+    function normalizeChoice(key, value) {
+        return choiceSettings[key].indexOf(value) !== -1 ? value : defaults[key];
+    }
+
     function updateSettings(values) {
-        Object.keys(defaults).forEach(function (key) {
+        booleanSettingKeys.forEach(function (key) {
             if (Object.prototype.hasOwnProperty.call(values || {}, key)) {
-                settings[key] =
-                    values[key] === true ||
-                    values[key] === 1 ||
-                    values[key] === '1' ||
-                    values[key] === 'true' ||
-                    values[key] === 'on';
+                settings[key] = normalizeBoolean(values[key]);
+            }
+        });
+        Object.keys(choiceSettings).forEach(function (key) {
+            if (Object.prototype.hasOwnProperty.call(values || {}, key)) {
+                settings[key] = normalizeChoice(key, values[key]);
             }
         });
         return copySettings(settings);
@@ -84,18 +115,56 @@
     function serializeSettings(values) {
         var serialized = {};
         var normalized = copySettings(defaults);
-        Object.keys(defaults).forEach(function (key) {
+        booleanSettingKeys.forEach(function (key) {
             if (Object.prototype.hasOwnProperty.call(values || {}, key)) {
-                normalized[key] =
-                    values[key] === true ||
-                    values[key] === 1 ||
-                    values[key] === '1' ||
-                    values[key] === 'true' ||
-                    values[key] === 'on';
+                normalized[key] = normalizeBoolean(values[key]);
             }
             serialized[key] = normalized[key] ? 1 : 0;
         });
+        Object.keys(choiceSettings).forEach(function (key) {
+            if (Object.prototype.hasOwnProperty.call(values || {}, key)) {
+                normalized[key] = normalizeChoice(key, values[key]);
+            }
+            serialized[key] = normalized[key];
+        });
         return serialized;
+    }
+
+    function typographyClassNames(values) {
+        return [
+            'proxmorph-font-' + normalizeChoice('uiFont', values.uiFont),
+            'proxmorph-text-' + normalizeChoice('uiTextSize', values.uiTextSize),
+        ];
+    }
+
+    function applyTypographySettings(refreshLayout) {
+        var documentRoot = window.document && window.document.documentElement;
+        if (!documentRoot || !documentRoot.classList) {
+            return;
+        }
+
+        ['default', 'modern'].forEach(function (name) {
+            documentRoot.classList.remove('proxmorph-font-' + name);
+        });
+        ['default', 'comfortable', 'large'].forEach(function (name) {
+            documentRoot.classList.remove('proxmorph-text-' + name);
+        });
+        typographyClassNames(settings).forEach(function (className) {
+            documentRoot.classList.add(className);
+        });
+
+        if (
+            refreshLayout &&
+            typeof Ext !== 'undefined' &&
+            Ext.ComponentQuery &&
+            Ext.ComponentQuery.query
+        ) {
+            Ext.ComponentQuery.query('viewport').forEach(function (viewport) {
+                if (viewport && viewport.updateLayout) {
+                    viewport.updateLayout();
+                }
+            });
+        }
     }
 
     function loadPreferences(callback) {
@@ -957,6 +1026,53 @@
                 },
                 {
                     xtype: 'fieldset',
+                    title: 'Typography',
+                    cls: 'pmx-inventory-section pmx-typography-section',
+                    margin: '0 0 12 0',
+                    defaults: {
+                        xtype: 'combo',
+                        queryMode: 'local',
+                        editable: false,
+                        forceSelection: true,
+                        valueField: 'field1',
+                        displayField: 'field2',
+                        labelWidth: 130,
+                        anchor: '100%',
+                    },
+                    items: [
+                        {
+                            name: 'uiFont',
+                            fieldLabel: 'Interface font',
+                            value: settings.uiFont,
+                            store: [
+                                ['default', 'Proxmox default'],
+                                ['modern', 'Modern system (recommended)'],
+                            ],
+                        },
+                        {
+                            xtype: 'component',
+                            cls: 'pmx-inventory-help pmx-typography-help',
+                            html: 'Uses Roboto Flex when available, followed by the operating system\'s native UI font. Icons and console text keep their purpose-built fonts.',
+                        },
+                        {
+                            name: 'uiTextSize',
+                            fieldLabel: 'Text size',
+                            value: settings.uiTextSize,
+                            store: [
+                                ['default', 'Default — 13 px'],
+                                ['comfortable', 'Comfortable — 14 px (recommended)'],
+                                ['large', 'Large — 15 px'],
+                            ],
+                        },
+                        {
+                            xtype: 'component',
+                            cls: 'pmx-inventory-help pmx-inventory-help-last pmx-typography-help',
+                            html: 'Scales interface labels, controls, menus, and resource-tree rows together.',
+                        },
+                    ],
+                },
+                {
+                    xtype: 'fieldset',
                     title: 'Account',
                     cls: 'pmx-inventory-section pmx-inventory-account-section',
                     margin: 0,
@@ -982,12 +1098,12 @@
         });
 
         var win = Ext.create('Ext.window.Window', {
-            title: 'Inventory View',
+            title: 'Inventory & Appearance',
             iconCls: 'fa fa-sitemap',
             modal: true,
             resizable: false,
             constrain: true,
-            width: 600,
+            width: 640,
             maxHeight: window.innerHeight ? Math.max(360, window.innerHeight - 48) : 720,
             layout: 'fit',
             items: [form],
@@ -1036,6 +1152,7 @@
                             win,
                             function () {
                                 updateSettings(values);
+                                applyTypographySettings(true);
                                 syncNavigationMode(viewSelector);
                                 refreshInventoryView(viewSelector, resourceTree);
                                 win.close();
@@ -1045,7 +1162,7 @@
                                     button.setDisabled(false);
                                 }
                                 Ext.Msg.alert(
-                                    'Unable to save Inventory View settings',
+                                    'Unable to save Inventory & Appearance settings',
                                     response && response.htmlStatus
                                         ? response.htmlStatus
                                         : 'The ProxMorph preferences service is unavailable.',
@@ -1148,12 +1265,24 @@
                 '.proxmorph-inventory-settings .pmx-inventory-summary-label { display: block; margin-bottom: 3px; color: var(--pm-text-dim, var(--gh-fg-muted, var(--pwt-text-color, inherit))); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }',
                 '.proxmorph-inventory-settings .pmx-inventory-summary-value { display: block; color: var(--pm-text, var(--gh-fg-default, var(--pwt-text-color, inherit))); font-weight: 600; line-height: 1.35; }',
                 '.proxmorph-inventory-settings .pmx-inventory-resource-help { margin-left: 0; }',
+                '.proxmorph-inventory-settings .pmx-typography-section .x-form-item { margin-bottom: 8px; }',
+                '.proxmorph-inventory-settings .pmx-typography-help { margin-left: 130px; }',
                 '.proxmorph-inventory-settings .pmx-inventory-account { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }',
                 '.proxmorph-inventory-settings .pmx-inventory-account-icon { color: var(--pm-accent, var(--gh-accent-fg, var(--pwt-text-color, inherit))); font-size: 18px; }',
                 '.proxmorph-inventory-settings .pmx-inventory-account-copy { display: flex; flex-direction: column; gap: 2px; }',
                 '.proxmorph-inventory-settings .pmx-inventory-account-copy strong { color: var(--pm-text, var(--gh-fg-default, var(--pwt-text-color, inherit))); font-weight: 600; }',
                 '.proxmorph-inventory-settings .pmx-inventory-account-copy span { color: var(--pm-text-dim, var(--gh-fg-muted, var(--pwt-text-color, inherit))); }',
                 '.pmx-inventory-secondary-action.x-btn.x-btn-default-small, .pmx-inventory-secondary-action.x-btn.x-btn-default-small.x-btn-over, .pmx-inventory-secondary-action.x-btn.x-btn-default-small.x-btn-focus, .pmx-inventory-secondary-action.x-btn.x-btn-default-small.x-btn-pressed { background-color: transparent !important; background-image: none !important; border-color: var(--pm-border, var(--gh-border-default, rgba(127, 127, 127, 0.42))) !important; box-shadow: none !important; }',
+                'html.proxmorph-font-modern { --proxmorph-ui-font: "Roboto Flex", "Segoe UI Variable", "Segoe UI", Roboto, system-ui, -apple-system, BlinkMacSystemFont, "Helvetica Neue", Arial, sans-serif; }',
+                'html.proxmorph-font-modern body, html.proxmorph-font-modern .x-body, html.proxmorph-font-modern .x-grid-item, html.proxmorph-font-modern .x-grid-cell-inner, html.proxmorph-font-modern .x-tree-node-text, html.proxmorph-font-modern .x-btn-inner, html.proxmorph-font-modern .x-form-item-label, html.proxmorph-font-modern .x-form-text, html.proxmorph-font-modern .x-form-display-field, html.proxmorph-font-modern .x-panel-header-title, html.proxmorph-font-modern .x-window-header-title, html.proxmorph-font-modern .x-tab-inner, html.proxmorph-font-modern .x-menu-item-text, html.proxmorph-font-modern .x-boundlist-item, html.proxmorph-font-modern .x-tip-body, html.proxmorph-font-modern .x-toolbar-text, html.proxmorph-font-modern .x-column-header-text, html.proxmorph-font-modern .x-fieldset-header-text { font-family: var(--proxmorph-ui-font) !important; font-kerning: normal; font-optical-sizing: auto; -webkit-font-smoothing: antialiased; }',
+                'html.proxmorph-font-modern .x-panel-header-title, html.proxmorph-font-modern .x-window-header-title, html.proxmorph-font-modern .x-fieldset-header-text { font-weight: 500 !important; letter-spacing: -0.01em; }',
+                'html.proxmorph-font-modern pre, html.proxmorph-font-modern code, html.proxmorph-font-modern kbd, html.proxmorph-font-modern samp, html.proxmorph-font-modern .xterm, html.proxmorph-font-modern .xterm * { font-family: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", Menlo, monospace !important; font-optical-sizing: none; }',
+                'html.proxmorph-text-default { --proxmorph-ui-size: 13px; --proxmorph-ui-line-height: 18px; }',
+                'html.proxmorph-text-comfortable { --proxmorph-ui-size: 14px; --proxmorph-ui-line-height: 20px; }',
+                'html.proxmorph-text-large { --proxmorph-ui-size: 15px; --proxmorph-ui-line-height: 22px; }',
+                'html[class*="proxmorph-text-"] body, html[class*="proxmorph-text-"] .x-body, html[class*="proxmorph-text-"] .x-grid-item, html[class*="proxmorph-text-"] .x-btn-inner, html[class*="proxmorph-text-"] .x-form-item-label, html[class*="proxmorph-text-"] .x-form-text, html[class*="proxmorph-text-"] .x-form-display-field, html[class*="proxmorph-text-"] .x-tab-inner, html[class*="proxmorph-text-"] .x-menu-item-text, html[class*="proxmorph-text-"] .x-boundlist-item, html[class*="proxmorph-text-"] .x-tip-body, html[class*="proxmorph-text-"] .x-toolbar-text, html[class*="proxmorph-text-"] .x-column-header-text, html[class*="proxmorph-text-"] .x-fieldset-header-text { font-size: var(--proxmorph-ui-size) !important; }',
+                'html[class*="proxmorph-text-"] .x-grid-cell-inner, html[class*="proxmorph-text-"] .x-tree-node-text, html[class*="proxmorph-text-"] .x-form-display-field, html[class*="proxmorph-text-"] .x-menu-item-text, html[class*="proxmorph-text-"] .x-boundlist-item, html[class*="proxmorph-text-"] .x-tip-body { line-height: var(--proxmorph-ui-line-height) !important; }',
+                'html[class*="proxmorph-text-"] .x-panel-header-title, html[class*="proxmorph-text-"] .x-window-header-title { font-size: calc(var(--proxmorph-ui-size) + 1px) !important; }',
             ].join('\n'),
             'proxmorph-inventory-navigation-style',
         );
@@ -1279,8 +1408,8 @@
             itemId: 'proxmorphInventorySettings',
             cls: 'x-btn-default-toolbar-small',
             iconCls: 'fa fa-fw fa-sitemap x-btn-icon-el-default-toolbar-small',
-            tooltip: 'Inventory visibility settings',
-            ariaLabel: 'Inventory visibility settings',
+            tooltip: 'Inventory and appearance settings',
+            ariaLabel: 'Inventory and appearance settings',
             margin: '0 0 0 3',
             handler: function () {
                 createSettingsWindow(viewSelector, resourceTree);
@@ -1339,6 +1468,7 @@
         loadPreferences(function () {
             installNavigation(viewSelector, resourceTree);
             installSettingsButton(viewSelector, resourceTree);
+            applyTypographySettings(false);
             restoreCustomViewState(viewSelector);
             syncNavigationMode(viewSelector);
             window.ProxMorphInventory.compatible = true;
@@ -1356,10 +1486,18 @@
         getSettings: function () {
             return copySettings(settings);
         },
-        setSettings: updateSettings,
+        setSettings: function (values) {
+            var updated = updateSettings(values);
+            applyTypographySettings(true);
+            return updated;
+        },
         resetSettings: function () {
             settings = copySettings(defaults);
+            applyTypographySettings(true);
             return copySettings(settings);
+        },
+        getTypographyClassNames: function () {
+            return typographyClassNames(settings);
         },
         preferencesAvailable: function () {
             return preferencesAvailable;

@@ -8,7 +8,7 @@ require(path.join(__dirname, '..', 'themes', 'patches', 'proxmorph-inventory.js'
 
 const inventory = global.window.ProxMorphInventory;
 assert.ok(inventory, 'inventory API is exposed');
-assert.equal(inventory.version, '1.6.1');
+assert.equal(inventory.version, '1.7.0');
 assert.equal(inventory.compatible, false, 'headless test does not claim an ExtJS match');
 
 let view = inventory.buildViewFilter();
@@ -56,6 +56,18 @@ assert.deepEqual(inventory.buildViewFilter().groups, ['pool']);
 assert.equal(inventory.getHierarchyLabel(), 'Datacenter → resource pool → guest');
 assert.equal(inventory.buildViewFilter().getFilterFn()({ data: { type: 'node' } }), false);
 assert.equal(inventory.buildViewFilter().getFilterFn()({ data: { type: 'pool' } }), true);
+
+inventory.setSettings({ uiFont: 'modern', uiTextSize: 'comfortable' });
+assert.deepEqual(inventory.getTypographyClassNames(), [
+    'proxmorph-font-modern',
+    'proxmorph-text-comfortable',
+]);
+inventory.setSettings({ uiFont: 'unsupported', uiTextSize: 'huge' });
+assert.deepEqual(
+    inventory.getTypographyClassNames(),
+    ['proxmorph-font-default', 'proxmorph-text-default'],
+    'unsupported account values safely fall back to the Proxmox presentation',
+);
 
 let storageView = inventory.buildViewFilter('proxmorph-storage');
 let storageVisible = storageView.getFilterFn();
@@ -105,6 +117,8 @@ assert.deepEqual(inventory.resetSettings(), {
     showStorage: false,
     showNetwork: false,
     showStoppedGuests: true,
+    uiFont: 'default',
+    uiTextSize: 'default',
 });
 
 console.log('PASS: ProxMorph Inventory filters and hierarchy');

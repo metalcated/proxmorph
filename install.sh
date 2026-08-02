@@ -15,7 +15,7 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Configuration
-VERSION="2.17.0"
+VERSION="2.18.0"
 TARGET_VERSION="$VERSION"
 WIDGET_TOOLKIT_DIR="/usr/share/javascript/proxmox-widget-toolkit"
 THEMES_DIR="${WIDGET_TOOLKIT_DIR}/themes"
@@ -1198,7 +1198,7 @@ preview_install_operation() {
             printf '  [modify] %s (register replicated preference file)\n' "$PVE_CLUSTER_PM"
             printf '  [modify] %s (register authenticated preferences API)\n' "$PVE_API2_PM"
             printf '  [copy] %s -> %s\n' "$PVE_PREFERENCES_SOURCE_RELATIVE" "$PVE_PROXMORPH_API_PM"
-            printf '  [on first Apply] %s (per-user Inventory View settings)\n' "$PVE_PREFERENCES_FILE"
+            printf '  [on first Apply] %s (per-user Inventory and Appearance settings)\n' "$PVE_PREFERENCES_FILE"
         fi
     fi
     printf '  [write] %s (release cache and installed-path ledger)\n' "$INSTALL_DIR"
@@ -3538,7 +3538,7 @@ install_themes() {
         cp "${themes_source}/patches"/*.js "${INSTALL_DIR}/themes/patches/" 2>/dev/null || true
     fi
 
-    # PVE stores Inventory View settings per authenticated account in pmxcfs.
+    # PVE stores Inventory and Appearance settings per authenticated account in pmxcfs.
     # This is installed before the hook so package updates can reapply the same
     # validated server-side extension from the cached release.
     install_pve_preferences_api
