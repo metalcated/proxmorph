@@ -59,6 +59,9 @@ check 'backup is marked complete' yes "$([[ -f "${backup_dir}/.complete" ]] && e
 verify_backup "$backup_dir" >/dev/null 2>&1
 check 'backup checksums verify' 0 "$?"
 check 'first clean snapshot becomes uninstall baseline' "$backup_id" "$(tr -d ' \t\r\n' < "$(product_backup_dir)/baseline")"
+backup_listing=$(list_backups)
+check 'backup listing exposes the restore ID' yes "$(grep -qF "$backup_id" <<< "$backup_listing" && echo yes || echo no)"
+check 'backup listing identifies the uninstall baseline' yes "$(grep -qF '[baseline]' <<< "$backup_listing" && echo yes || echo no)"
 
 printf '%s\n' 'CHANGED PROXMOXLIB' > "$PROXMOXLIB_JS"
 printf '%s\n' 'CHANGED INDEX' > "$INDEX_TEMPLATE"
@@ -114,7 +117,7 @@ mkdir -p "$JS_PATCHES_DIR" "$INSTALL_DIR"
 printf '%s\n' 'installed patch' > "${JS_PATCHES_DIR}/installed.js"
 printf '%s\n' 'installed theme' > "${THEMES_DIR}/theme-test.css"
 printf '%s\n' "${THEMES_DIR}/theme-test.css" "$JS_PATCHES_DIR" > "$INSTALLED_PATHS_FILE"
-printf '%s\n' '2.10.0' > "${INSTALL_DIR}/.version"
+printf '%s\n' '2.11.0' > "${INSTALL_DIR}/.version"
 uninstall_themes --yes >/dev/null 2>&1
 check 'uninstall succeeds from the clean baseline' 0 "$?"
 check 'uninstall restores package-owned files' 'ORIGINAL PROXMOXLIB' "$(cat "$PROXMOXLIB_JS")"

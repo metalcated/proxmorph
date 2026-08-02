@@ -15,7 +15,7 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Configuration
-VERSION="2.10.0"
+VERSION="2.11.0"
 TARGET_VERSION="$VERSION"
 WIDGET_TOOLKIT_DIR="/usr/share/javascript/proxmox-widget-toolkit"
 THEMES_DIR="${WIDGET_TOOLKIT_DIR}/themes"
@@ -70,6 +70,7 @@ TRANSACTION_ACTIVE=false
 TRANSACTION_ROLLING_BACK=false
 LAST_BACKUP_ID=""
 RELEASE_DOWNLOADED=false
+DRY_RUN=false
 
 echo -e "${CYAN}"
 echo "╔═══════════════════════════════════════════════════════════╗"
@@ -944,6 +945,415 @@ find_current_clean_package_backup() {
     done
     [[ -n "$found" ]] || return 1
     printf '%s' "$found"
+}
+
+# ─── No-write operation previews ───────────────────────────────
+
+print_dry_run_header() {
+    local operation="$1"
+    echo ""
+    print_info "DRY RUN: ${operation}"
+    print_info "No files, backups, packages, services, or remote nodes will be changed."
+    echo ""
+}
+
+preview_backup_plan() {
+    local reason="$1"
+    local themes_source="${2:-}"
+    local path=""
+    local package=""
+    print_info "Backup destination: $(product_backup_dir)/<timestamped-id>"
+    print_info "Backup reason: ${reason}"
+    print_info "Package versions to record:"
+    while IFS= read -r package; do
+        [[ -n "$package" ]] || continue
+        printf '  [record] %s=%s\n' "$package" "$(get_installed_package_version "$package")"
+    done < <(get_product_package_names)
+
+    collect_backup_candidates "$themes_source"
+    print_info "Backup inventory:"
+    for path in "${BACKUP_CANDIDATES[@]}"; do
+        if path_exists "$path"; then
+            printf '  [back up] %s\n' "$path"
+        else
+            printf '  [record absent] %s\n' "$path"
+        fi
+    done
+}
+
+preview_install_operation() {
+    local operation="$1"
+    local version="${2:-}"
+    local version_label="latest release"
+    local themes_source=""
+    local css_file=""
+    local js_file=""
+    local restore_package="proxmox-widget-toolkit"
+
+    print_dry_run_header "$operation"
+    validate_runtime_contracts || return 1
+    themes_source=$(get_themes_source || true)
+
+    if [[ "$operation" == "update" ]]; then
+        [[ -n "$version" ]] && version_label="v${version}"
+        print_info "Would download and checksum-verify ProxMorph ${version_label} before replacing ${INSTALL_DIR}."
+        if [[ -n "$themes_source" ]]; then
+            print_warning "Destination names below are based on the currently available source: ${themes_source}"
+            print_warning "A newer release may introduce additional names; the real update adds them to the backup before copying."
+        fi
+    elif [[ "$operation" == "reinstall" ]]; then
+        [[ "$PRODUCT" == "PDM" ]] && restore_package="proxmox-datacenter-manager-ui"
+        print_info "Would reinstall the currently selected ${restore_package} package before reapplying ProxMorph."
+    fi
+
+    if [[ -z "$themes_source" ]]; then
+        print_warning "No local or cached theme source is available; incoming theme filenames cannot be enumerated without downloading the release."
+    else
+        print_info "Theme source: ${themes_source}"
+    fi
+    preview_backup_plan "$operation" "$themes_source"
+
+    echo ""
+    print_info "Planned installation actions:"
+    if [[ "$PRODUCT" == "PDM" ]]; then
+        if [[ -n "$themes_source" ]]; then
+            [[ -f "${themes_source}/proxmorph-pdm-base.css" ]] && \
+                printf '  [copy] %s -> %s/\n' "${themes_source}/proxmorph-pdm-base.css" "$PDM_THEMES_DIR"
+            for css_file in "$themes_source"/theme-*.css; do
+                [[ -f "$css_file" ]] || continue
+                printf '  [copy] %s -> %s/\n' "$css_file" "$PDM_THEMES_DIR"
+            done
+            js_file="$(dirname "$themes_source")/patches/pdm-theme-selector.js"
+            [[ -f "$js_file" ]] && printf '  [copy] %s -> %s/\n' "$js_file" "$PDM_JS_PATCHES_DIR"
+        fi
+        printf '  [modify] %s (inject PDM theme links and selector loader)\n' "$INDEX_TEMPLATE"
+    else
+        if [[ -n "$themes_source" ]]; then
+            for css_file in "$themes_source"/theme-*.css; do
+                [[ -f "$css_file" ]] || continue
+                printf '  [copy] %s -> %s/\n' "$css_file" "$THEMES_DIR"
+            done
+            for js_file in "$themes_source"/patches/*.js; do
+                [[ -f "$js_file" ]] || continue
+                printf '  [copy] %s -> %s/\n' "$js_file" "$JS_PATCHES_DIR"
+            done
+        fi
+        printf '  [modify] %s (register theme keys)\n' "$PROXMOXLIB_JS"
+        printf '  [modify] %s (load JavaScript patches/default theme)\n' "$INDEX_TEMPLATE"
+        if [[ "$PRODUCT" == "PVE" ]]; then
+            printf '  [optional] %s (only if hardware sensors are enabled)\n' "$NODES_PM"
+        fi
+    fi
+    printf '  [write] %s (release cache and installed-path ledger)\n' "$INSTALL_DIR"
+    printf '  [write] %s\n' "$APT_HOOK_FILE"
+    printf '  [restart] %s\n' "$PROXY_SERVICE"
+}
+
+preview_inventory_actions() {
+    local backup_dir="$1"
+    local scope="${2:-all}"
+    local state=""
+    local path=""
+    local node=""
+    while IFS=$'\t' read -r state path; do
+        [[ -n "$path" ]] || continue
+        if [[ "$scope" == "nonpackage" ]]; then
+            case "$path" in
+                "$INDEX_TEMPLATE"|"$PROXMOXLIB_JS"|"$NODES_PM") continue ;;
+            esac
+            if command -v dpkg &>/dev/null && dpkg -S "$path" &>/dev/null; then
+                printf '  [preserve current package] %s\n' "$path"
+                continue
+            fi
+        elif [[ "$scope" == "package" ]]; then
+            case "$path" in
+                "$INDEX_TEMPLATE"|"$PROXMOXLIB_JS"|"$NODES_PM") ;;
+                *) continue ;;
+            esac
+        fi
+
+        if [[ "$state" == "present" ]]; then
+            printf '  [restore] %s\n' "$path"
+        elif path_exists "$path"; then
+            printf '  [remove; originally absent] %s\n' "$path"
+        else
+            printf '  [leave absent] %s\n' "$path"
+        fi
+    done < "${backup_dir}/inventory.tsv"
+
+    if [[ "$scope" == "all" && -f "${backup_dir}/remote-inventory.tsv" ]]; then
+        while IFS=$'\t' read -r state node path; do
+            if [[ "$state" == "present" ]]; then
+                printf '  [restore remote] %s:%s\n' "$node" "$path"
+            else
+                printf '  [remove remote; originally absent] %s:%s\n' "$node" "$path"
+            fi
+        done < "${backup_dir}/remote-inventory.tsv"
+    fi
+}
+
+preview_restore_operation() {
+    local requested="${1:-latest}"
+    shift || true
+    local force_version=false
+    local arg=""
+    local backup_id=""
+    local backup_dir=""
+    local backup_product=""
+    for arg in "$@"; do
+        case "$arg" in
+            --force) force_version=true ;;
+            --yes) ;;
+            *) print_error "Unknown restore option: $arg"; return 1 ;;
+        esac
+    done
+
+    print_dry_run_header "restore ${requested}"
+    backup_id=$(resolve_backup_id "$requested") || {
+        print_error "Backup not found for ${PRODUCT}: ${requested}"
+        return 1
+    }
+    backup_dir="$(product_backup_dir)/${backup_id}"
+    verify_backup "$backup_dir" || return 1
+    backup_product=$(backup_metadata_value "$backup_dir" product)
+    [[ "$backup_product" == "$PRODUCT" ]] || {
+        print_error "Backup product ${backup_product} does not match detected product ${PRODUCT}"
+        return 1
+    }
+    if ! verify_backup_package_versions "$backup_dir"; then
+        if [[ "$force_version" == "true" ]]; then
+            print_warning "Package-version mismatch would be overridden by --force."
+        else
+            print_error "Restore would be blocked by the package-version guard. Review the mismatch before using --force."
+            return 1
+        fi
+    fi
+
+    print_info "Resolved backup ID: ${backup_id}"
+    print_info "Created: $(backup_metadata_value "$backup_dir" created_utc)"
+    print_info "Reason: $(backup_metadata_value "$backup_dir" reason)"
+    echo ""
+    print_info "Planned pre-restore safety backup:"
+    preview_backup_plan "pre-restore" "$(get_themes_source || true)"
+    echo ""
+    print_info "Planned restore actions:"
+    preview_inventory_actions "$backup_dir" all
+    printf '  [restart] %s\n' "$PROXY_SERVICE"
+}
+
+preview_uninstall_assets() {
+    local themes_source="${1:-}"
+    local path=""
+    local css_file=""
+    if [[ -f "$INSTALLED_PATHS_FILE" ]]; then
+        while IFS= read -r path; do
+            [[ -n "$path" ]] && printf '  [remove current release asset] %s\n' "$path"
+        done < "$INSTALLED_PATHS_FILE"
+    elif [[ "$PRODUCT" == "PDM" ]]; then
+        printf '  [remove current release asset] %s\n' "$PDM_THEMES_DIR" "$PDM_JS_PATCHES_DIR"
+    else
+        for css_file in "$themes_source"/theme-*.css; do
+            [[ -f "$css_file" ]] || continue
+            printf '  [remove current release asset] %s/%s\n' "$THEMES_DIR" "$(basename "$css_file")"
+        done
+        printf '  [remove current release asset] %s\n' "$JS_PATCHES_DIR"
+    fi
+}
+
+preview_uninstall_fallback_cleanup() {
+    local node=""
+    if [[ "$PRODUCT" == "PDM" ]]; then
+        printf '  [remove] %s\n' "$PDM_THEMES_DIR" "$PDM_JS_PATCHES_DIR"
+        printf '  [modify] %s (remove PDM theme injection)\n' "$INDEX_TEMPLATE"
+    else
+        printf '  [remove] %s\n' "$JS_PATCHES_DIR"
+        printf '  [modify] %s (remove JavaScript/default-theme injection)\n' "$INDEX_TEMPLATE"
+        if [[ "$PRODUCT" == "PVE" ]]; then
+            printf '  [modify] %s (remove sensor API block)\n' "$NODES_PM"
+            printf '  [remove] %s\n' "$SENSORS_CONFIG" "$SENSORS_FILTER"
+            while IFS= read -r node; do
+                [[ -n "$node" ]] || continue
+                printf '  [back up] %s:%s\n' "$node" "$NODES_PM"
+                printf '  [back up] %s:%s\n' "$node" "$SENSORS_FILTER"
+                printf '  [modify remote] %s:%s (remove sensor API block)\n' "$node" "$NODES_PM"
+                printf '  [restart remote] %s:pveproxy\n' "$node"
+            done < <(get_remote_nodes)
+        fi
+    fi
+    printf '  [remove] %s\n' "$APT_HOOK_FILE" "$CONFIG_DIR" "$PROXMORPH_LOG_FILE" "$INSTALL_DIR"
+}
+
+preview_current_package_reinstall() {
+    local package=""
+    print_info "Would reinstall the current ${PRODUCT} web package(s):"
+    case "$PRODUCT" in
+        PVE) printf '%s\n' pve-manager proxmox-widget-toolkit ;;
+        PBS) printf '%s\n' proxmox-backup-server proxmox-widget-toolkit ;;
+        PDM) printf '%s\n' proxmox-datacenter-manager-ui ;;
+    esac | while IFS= read -r package; do
+        [[ -n "$package" ]] && printf '  [reinstall package] %s\n' "$package"
+    done
+}
+
+preview_uninstall_operation() {
+    local themes_source=""
+    local baseline_id=""
+    local baseline_dir=""
+    local clean_id=""
+    local clean_dir=""
+    local baseline_verified=false
+    local used_baseline=false
+
+    print_dry_run_header "uninstall"
+    themes_source=$(get_themes_source || true)
+    preview_backup_plan "uninstall" "$themes_source"
+    echo ""
+    print_info "Planned uninstall actions:"
+    preview_uninstall_assets "$themes_source"
+
+    if baseline_id=$(resolve_backup_id baseline 2>/dev/null); then
+        baseline_dir="$(product_backup_dir)/${baseline_id}"
+        if verify_backup "$baseline_dir"; then
+            baseline_verified=true
+        fi
+        if [[ "$baseline_verified" == "true" ]] && verify_backup_package_versions "$baseline_dir"; then
+            print_info "Would restore exact clean baseline: ${baseline_id}"
+            preview_inventory_actions "$baseline_dir" all
+            used_baseline=true
+        else
+            print_warning "The baseline cannot safely restore current package files; the fallback uninstall path would be used."
+        fi
+    else
+        print_warning "No clean baseline exists; the fallback uninstall path would be used."
+    fi
+
+    if [[ "$used_baseline" != "true" ]]; then
+        preview_uninstall_fallback_cleanup
+        clean_id=$(find_current_clean_package_backup || true)
+        if [[ -n "$clean_id" ]]; then
+            clean_dir="$(product_backup_dir)/${clean_id}"
+            print_info "Would restore current clean package files from: ${clean_id}"
+            preview_inventory_actions "$clean_dir" package
+        else
+            preview_current_package_reinstall
+        fi
+        if [[ "$baseline_verified" == "true" ]]; then
+            print_info "Would restore pre-existing non-package files from baseline: ${baseline_id}"
+            preview_inventory_actions "$baseline_dir" nonpackage
+        fi
+    fi
+    printf '  [retain] %s (all rollback backups)\n' "$(product_backup_dir)"
+    printf '  [restart] %s\n' "$PROXY_SERVICE"
+}
+
+preview_default_theme_operation() {
+    local arg="${1:-}"
+    [[ -n "$arg" ]] || {
+        manage_default_theme
+        return 0
+    }
+    print_dry_run_header "default-theme ${arg}"
+    if [[ "$arg" != "none" ]]; then
+        if [[ "$PRODUCT" == "PDM" ]]; then
+            [[ -f "${PDM_THEMES_DIR}/theme-${arg}.css" ]] || {
+                print_error "Theme 'theme-${arg}.css' is not installed"
+                return 1
+            }
+        else
+            [[ -f "${THEMES_DIR}/theme-${arg}.css" ]] || {
+                print_error "Theme 'theme-${arg}.css' is not installed"
+                return 1
+            }
+        fi
+    fi
+    preview_backup_plan "default-theme" ""
+    if [[ "$arg" == "none" ]]; then
+        printf '  [remove] %s\n' "$DEFAULT_THEME_FILE"
+    else
+        printf '  [write] %s = %s\n' "$DEFAULT_THEME_FILE" "$arg"
+    fi
+    printf '  [refresh injection] %s\n' "$INDEX_TEMPLATE"
+    printf '  [restart] %s\n' "$PROXY_SERVICE"
+}
+
+preview_sensor_operation() {
+    local action="${1:-status}"
+    local node=""
+    if [[ "$action" == "status" ]]; then
+        manage_sensors status
+        return
+    elif [[ "$action" == "detect" ]]; then
+        detect_sensors
+        return
+    fi
+    [[ "$PRODUCT" == "PVE" ]] || {
+        print_error "Hardware sensor support is only available for Proxmox VE"
+        return 1
+    }
+    print_dry_run_header "sensors ${action}"
+    case "$action" in
+        enable)
+            detect_sensors || return 1
+            preview_backup_plan "sensors-enable" ""
+            printf '  [modify] %s (sensor API block)\n' "$NODES_PM"
+            printf '  [write] %s\n' "$SENSORS_CONFIG"
+            while IFS= read -r node; do
+                [[ -n "$node" ]] || continue
+                printf '  [optional back up] %s:%s\n' "$node" "$NODES_PM"
+                printf '  [optional back up] %s:%s\n' "$node" "$SENSORS_FILTER"
+                printf '  [optional deploy] %s:%s\n' "$node" "$NODES_PM"
+                [[ -f "$SENSORS_FILTER" ]] && printf '  [optional deploy] %s:%s\n' "$node" "$SENSORS_FILTER"
+                printf '  [optional restart] %s:pveproxy\n' "$node"
+            done < <(get_remote_nodes)
+            ;;
+        disable)
+            preview_backup_plan "sensors-disable" ""
+            printf '  [modify] %s (remove sensor API block)\n' "$NODES_PM"
+            printf '  [remove] %s\n' "$SENSORS_CONFIG" "$SENSORS_FILTER"
+            while IFS= read -r node; do
+                [[ -n "$node" ]] || continue
+                printf '  [back up] %s:%s\n' "$node" "$NODES_PM"
+                printf '  [back up] %s:%s\n' "$node" "$SENSORS_FILTER"
+                printf '  [modify remote] %s:%s (remove sensor API block)\n' "$node" "$NODES_PM"
+                printf '  [restart remote] %s:pveproxy\n' "$node"
+            done < <(get_remote_nodes)
+            ;;
+        configure)
+            if ! check_sensors; then
+                print_error "Sensors are not enabled. Enable them first with: install.sh sensors enable"
+                return 1
+            fi
+            preview_backup_plan "sensors-configure" ""
+            printf '  [write] %s\n' "$SENSORS_FILTER"
+            printf '  [refresh] %s\n' "$NODES_PM"
+            ;;
+        *) print_error "Unknown sensor action: $action"; return 1 ;;
+    esac
+    printf '  [restart] %s\n' "$PROXY_SERVICE"
+}
+
+dry_run_dispatch() {
+    local command="${1:-install}"
+    shift || true
+    case "$command" in
+        install) preview_install_operation install ;;
+        update) preview_install_operation update "${1:-}" ;;
+        reinstall) preview_install_operation reinstall ;;
+        backup)
+            print_dry_run_header "backup ${1:-manual}"
+            preview_backup_plan "${1:-manual}" "$(get_themes_source || true)"
+            ;;
+        restore) preview_restore_operation "${1:-latest}" "${@:2}" ;;
+        uninstall) preview_uninstall_operation ;;
+        default-theme) preview_default_theme_operation "${1:-}" ;;
+        sensors) preview_sensor_operation "${1:-status}" ;;
+        compatibility) validate_runtime_contracts ;;
+        list) list_themes ;;
+        status) show_status ;;
+        check) check_updates ;;
+        backups|list-backups) list_backups ;;
+        *) print_error "Dry run is not supported for command: $command"; return 1 ;;
+    esac
 }
 
 begin_transaction() {
@@ -3016,6 +3426,21 @@ show_menu() {
 
 # Parse command line arguments
 main() {
+    local arg=""
+    local -a filtered_args=()
+
+    # Accept --dry-run before or after the command and remove it before normal
+    # positional parsing. A dry run exits before lock acquisition so even the
+    # operation lock file remains untouched.
+    for arg in "$@"; do
+        if [[ "$arg" == "--dry-run" ]]; then
+            DRY_RUN=true
+        else
+            filtered_args+=("$arg")
+        fi
+    done
+    set -- "${filtered_args[@]}"
+
     # Compatibility is read-only and should be usable by an unprivileged
     # administrator before deciding whether to install anything as root.
     if [[ "${1:-}" == "compatibility" ]]; then
@@ -3026,6 +3451,11 @@ main() {
 
     check_root
     check_product
+
+    if [[ "$DRY_RUN" == "true" ]]; then
+        dry_run_dispatch "${1:-install}" "${@:2}"
+        return
+    fi
 
     case "${1:-}" in
         list|status|check|backups|list-backups) ;;

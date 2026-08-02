@@ -146,6 +146,7 @@ Checksum verification still runs, against your mirrored `SHA256SUMS`.
 | `./install.sh list-backups` | List backups and identify the clean uninstall baseline |
 | `./install.sh restore <id\|latest\|baseline>` | Restore a backup after confirmation |
 | `./install.sh restore <id> --yes` | Non-interactive restore; add `--force` only for a reviewed package-version mismatch |
+| `./install.sh <command> ... --dry-run` | Preview planned backup, file, package, service, and remote-node actions without changing anything |
 | `./install.sh` | Shows Menu to manage|
 
 ## 🗂️ Inventory View (PVE)
@@ -185,6 +186,18 @@ Before every install, update, reinstall, restore, uninstall, default-theme chang
 - Product package versions, file state, preserved ownership/modes, and SHA-256 checksums.
 
 If a mutating operation fails or is interrupted, the just-created snapshot is restored automatically. Manual restore also creates a pre-restore snapshot first. A normal restore refuses to overwrite package-owned files when the installed Proxmox package versions differ from the backup; `--force` is available for an explicitly reviewed exception.
+
+Use `list-backups` to obtain a restore ID. Each row includes the ID, UTC creation time, reason, and a `[baseline]` marker for the clean uninstall snapshot:
+
+```bash
+./install.sh list-backups
+./install.sh restore 20260801T153000Z-pve-1234-5678 --dry-run
+./install.sh restore 20260801T153000Z-pve-1234-5678
+```
+
+`latest` and `baseline` can be used instead of a timestamped ID. The restore dry run verifies the backup checksums and package-version guard, resolves the selected ID, and lists every local or remote path that would be restored, removed, or left absent.
+
+Add `--dry-run` anywhere on an `install`, `update`, `reinstall`, `backup`, `restore`, `uninstall`, `default-theme`, or mutating `sensors` command. The preview still performs read-only compatibility and backup-integrity checks, but it does not download a release, create a backup or lock file, write files, change packages, restart services, or contact remote cluster nodes. Run it as root so it can inspect the same protected files and backup inventory as the real operation.
 
 `uninstall` asks for confirmation, backs up the installed state, then restores the clean same-version baseline. If the baseline belongs to an older Proxmox package version, the installer uses the newest verified `apt-repatch` snapshot of the current clean package files when available; otherwise it reinstalls the currently selected Proxmox web packages. Pre-existing non-package files still come from the baseline, and stale package files are never restored implicitly. Backups are retained and never pruned automatically.
 

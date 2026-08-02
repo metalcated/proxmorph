@@ -12,9 +12,10 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Inventory View for PVE**: adds an optional node → resource pool → guest hierarchy to the native view selector, plus a modal for showing or hiding VMs, containers, templates, storage, SDN/network resources, stopped guests, and pool grouping. Includes expand/collapse actions and uses no new browser-local persistence.
 - **Full transactional backup and restore**: creates timestamped, checksummed, per-product snapshots before every mutating operation; restores failed/interrupted operations automatically; adds `backup`, `list-backups`, and version-guarded `restore` commands; and preserves remote cluster sensor files before deployment.
 - **Baseline-driven full uninstall**: restores the clean pre-install snapshot when package versions match, retains an uninstall rollback snapshot, and safely reinstalls the current web packages when a same-version baseline is unavailable.
+- **No-write dry run**: accepts `--dry-run` before or after supported commands; validates runtime and backup integrity, resolves restore IDs, and previews planned backup/file/package/service/remote-node actions without creating even an operation lock.
 
 ### Changed
-- Bumped the installer version to 2.10.0.
+- Bumped the installer version to 2.11.0.
 - The APT update hook now snapshots newly installed package files before re-patching and restores them automatically if re-patching fails.
 
 ### Fixed
