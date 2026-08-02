@@ -210,7 +210,7 @@ const formValues = {
     showTemplates: true,
     showStorage: false,
     showNetwork: true,
-    showStoppedGuests: true,
+    showStoppedGuests: false,
 };
 
 // Mirrors the native Workspace listener that applies the selector's view to
@@ -379,6 +379,19 @@ assert.ok(
     settingsItems.some((item) => item.name === 'groupByNode'),
     'settings modal exposes the hierarchy option',
 );
+const stoppedGuestsControl = settingsItems.find(
+    (item) => item.itemId === 'proxmorphShowStoppedGuests',
+);
+assert.ok(stoppedGuestsControl, 'settings modal exposes powered-off guest visibility');
+assert.equal(stoppedGuestsControl.boxLabel, 'Show powered-off VMs and containers');
+assert.ok(
+    settingsItems.some(
+        (item) =>
+            item.itemId === 'proxmorphShowStoppedGuestsHelp' &&
+            /hide stopped guests/.test(item.html),
+    ),
+    'the powered-off guest control explains its filtering behavior',
+);
 assert.ok(
     settingsItems.some(
         (item) =>
@@ -410,6 +423,7 @@ assert.equal(apiRequests[1].method, 'PUT');
 assert.equal(apiRequests[1].url, '/proxmorph/preferences');
 assert.equal(apiRequests[1].params.groupByNode, 0);
 assert.equal(apiRequests[1].params.useIconNavigation, 1);
+assert.equal(apiRequests[1].params.showStoppedGuests, 0);
 
 assert.equal(selector.getValue(), 'proxmorph-inventory');
 assert.equal(selector.hidden, true, 'native picker is hidden when icon navigation is enabled');
@@ -425,6 +439,11 @@ assert.deepEqual(appliedView.groups, ['pool']);
 assert.equal(appliedView.getFilterFn()({ data: { type: 'qemu', status: 'running' } }), false);
 assert.equal(appliedView.getFilterFn()({ data: { type: 'storage' } }), false);
 assert.equal(appliedView.getFilterFn()({ data: { type: 'lxc', status: 'running' } }), true);
+assert.equal(
+    appliedView.getFilterFn()({ data: { type: 'lxc', status: 'stopped' } }),
+    false,
+    'Apply immediately hides powered-off guests when the control is disabled',
+);
 assert.equal(
     navigationItems.find((item) => item.ariaLabel === 'Inventory view').pressed,
     true,

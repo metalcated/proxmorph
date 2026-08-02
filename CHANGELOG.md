@@ -20,12 +20,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **No-write dry run**: accepts `--dry-run` before or after supported commands; validates runtime and backup integrity, resolves restore IDs, and previews planned backup/file/package/service/remote-node actions without creating even an operation lock.
 
 ### Changed
-- Bumped the installer version to 2.15.0.
+- Bumped the installer version to 2.15.1.
 - Inventory View now defaults to guest resources only; storage and connectivity remain available in their dedicated views or can be explicitly enabled in the modal.
 - The APT update hook now snapshots newly installed package files before re-patching and restores them automatically if re-patching fails.
 - Interactive menu actions now return to the main menu after success, cancellation, or failure instead of ending the installer; command-line subcommands remain one-shot.
 
 ### Fixed
+- **Powered-off guest visibility control**: restores the compact modal's easily missed `Stopped guests` checkbox as an explicit full-width **Show powered-off VMs and containers** control while retaining the same account-saved preference and filtering behavior.
 - **Missing Connections vNets**: supplements the native cluster resource feed, which contains zones and fabrics but omits vNet configuration records, while preserving a safe zones/fabrics-only fallback if the endpoint or UI contracts change.
 - **PDM Catppuccin Frappé and Macchiato**: restored the missing dark-mode semantic selector so their surface variables are valid CSS and apply on Proxmox Datacenter Manager.
 - **Stale PDM restore protection**: `reinstall` no longer copies the original first-install `index.hbs` over a newer PDM package; it restores the currently installed UI package before reapplying themes.

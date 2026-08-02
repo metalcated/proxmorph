@@ -13,7 +13,7 @@
  * protected API and the replicated Proxmox cluster filesystem. The selected
  * view itself continues to use Proxmox's native URL state.
  *
- * Version: 1.5.0
+ * Version: 1.5.1
  */
 (function () {
     'use strict';
@@ -24,7 +24,7 @@
     var CONNECTIVITY_VIEW_KEY = 'proxmorph-connectivity';
     var VNET_TYPE = 'proxmorph-vnet';
     var VNETS_URL = '/cluster/sdn/vnets';
-    var VERSION = '1.5.0';
+    var VERSION = '1.5.1';
     var PREFERENCES_URL = '/proxmorph/preferences';
     var MAX_INIT_ATTEMPTS = 40;
     var initAttempts = 0;
@@ -797,6 +797,22 @@
                     margin: '0 0 12 0',
                     items: [
                         {
+                            xtype: 'checkboxfield',
+                            name: 'showStoppedGuests',
+                            itemId: 'proxmorphShowStoppedGuests',
+                            boxLabel: 'Show powered-off VMs and containers',
+                            inputValue: true,
+                            uncheckedValue: false,
+                            checked: settings.showStoppedGuests,
+                            cls: 'pmx-inventory-option',
+                        },
+                        {
+                            xtype: 'component',
+                            itemId: 'proxmorphShowStoppedGuestsHelp',
+                            cls: 'pmx-inventory-help',
+                            html: 'Turn this off to hide stopped guests from Inventory View.',
+                        },
+                        {
                             xtype: 'container',
                             layout: 'column',
                             defaults: {
@@ -822,11 +838,6 @@
                                     name: 'showTemplates',
                                     boxLabel: 'Templates',
                                     checked: settings.showTemplates,
-                                },
-                                {
-                                    name: 'showStoppedGuests',
-                                    boxLabel: 'Stopped guests',
-                                    checked: settings.showStoppedGuests,
                                 },
                                 {
                                     name: 'showStorage',

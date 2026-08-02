@@ -164,7 +164,7 @@ Datacenter
     └── VM or Container
 ```
 
-Click the sitemap button next to the native Tree Settings gear to show or hide virtual machines, containers, templates, storage, SDN/network resources, stopped guests, the node level, and pool folders. The same modal includes **Expand all** and **Collapse all** actions. Inventory is guest-focused by default: VMs, containers, and templates appear there, while storage and connectivity remain in their dedicated views unless explicitly enabled.
+Click the sitemap button next to the native Tree Settings gear to show or hide virtual machines, containers, templates, storage, SDN/network resources, powered-off VMs and containers, the node level, and pool folders. The explicit **Show powered-off VMs and containers** control can flatten Inventory down to running guests only. The same modal includes **Expand all** and **Collapse all** actions. Inventory is guest-focused by default: VMs, containers, and templates appear there, while storage and connectivity remain in their dedicated views unless explicitly enabled.
 
 **Show node level in hierarchy** controls the two layouts directly:
 
