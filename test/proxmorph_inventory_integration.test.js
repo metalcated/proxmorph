@@ -14,6 +14,12 @@ let rootText = 'Datacenter';
 let routedContent;
 const apiRequests = [];
 const definedClasses = {};
+const nativeDatacenterMenuItem = { text: 'Bulk Start', itemId: 'bulkstart' };
+const nativeNodeMenuItem = { text: 'Create VM', itemId: 'createvm' };
+const classRegistry = {
+    'PVE.dc.CmdMenu': { prototype: { items: [nativeDatacenterMenuItem] } },
+    'PVE.node.CmdMenu': { prototype: { items: [nativeNodeMenuItem] } },
+};
 const availableClasses = new Set([
     'PVE.form.ViewSelector',
     'PVE.tree.ResourceTree',
@@ -30,6 +36,8 @@ function makeNode(id, children = [], expanded = false, text = id) {
         data: { id, text },
         childNodes: children,
         expanded,
+        dirty: false,
+        commitCount: 0,
         isLeaf() {
             return this.childNodes.length === 0;
         },
@@ -57,9 +65,14 @@ function makeNode(id, children = [], expanded = false, text = id) {
         },
         set(field, value) {
             this.data[field] = value;
+            this.dirty = true;
             if (id === 'root' && field === 'text') {
                 rootText = value;
             }
+        },
+        commit() {
+            this.dirty = false;
+            this.commitCount++;
         },
         findChild(field, value, deep = false) {
             for (const child of this.childNodes) {
@@ -124,19 +137,10 @@ function flattenConfigItems(items) {
     return flattened;
 }
 
-function buildContextMenu(overrideName, record) {
-    const items = [];
-    const menu = {
-        pveSelNode: record,
-        callParent() {
-            this.nativeInitCalled = true;
-        },
-        add(configs) {
-            items.push(...configs);
-        },
-    };
-    definedClasses[overrideName].initComponent.call(menu);
-    return { menu, items };
+function runContextAction(items, itemId, record) {
+    items.find((item) => item.itemId === itemId).handler.call({
+        up: () => ({ pveSelNode: record }),
+    });
 }
 
 let currentRoot = makeRoot('server');
@@ -278,7 +282,9 @@ global.Proxmox = {
     },
 };
 global.Ext = {
-    ClassManager: { get: (name) => availableClasses.has(name) },
+    ClassManager: {
+        get: (name) => classRegistry[name] || availableClasses.has(name),
+    },
     define(name, config) {
         availableClasses.add(name);
         definedClasses[name] = config;
@@ -392,33 +398,34 @@ assert.equal(selector.getViewFilter().id, 'server', 'native view behavior remain
 findNode(currentRoot, 'node/pve01').expand();
 assert.equal(findNode(currentRoot, 'node/pve01').isExpanded(), true);
 
-const datacenterMenu = buildContextMenu(
-    'ProxMorph.overrides.DatacenterCmdMenu',
-    currentRoot,
+const datacenterMenuItems = classRegistry['PVE.dc.CmdMenu'].prototype.items;
+assert.equal(
+    datacenterMenuItems[0],
+    nativeDatacenterMenuItem,
+    'native Datacenter menu configuration remains intact',
 );
-assert.equal(datacenterMenu.menu.nativeInitCalled, true, 'native Datacenter menu remains intact');
 assert.deepEqual(
-    datacenterMenu.items.filter((item) => item.text).map((item) => item.text),
-    ['Expand all', 'Collapse all'],
+    datacenterMenuItems.filter((item) => item.text).map((item) => item.text),
+    ['Bulk Start', 'Expand all', 'Collapse all'],
     'Datacenter context menu exposes both tree-wide actions',
 );
-datacenterMenu.items.find((item) => item.itemId === 'proxmorphCollapseBranch').handler();
+runContextAction(datacenterMenuItems, 'proxmorphCollapseBranch', currentRoot);
 assert.equal(currentRoot.isExpanded(), true, 'Collapse all keeps the Datacenter root visible');
 assert.equal(findNode(currentRoot, 'node/pve01').isExpanded(), false);
-datacenterMenu.items.find((item) => item.itemId === 'proxmorphExpandBranch').handler();
+runContextAction(datacenterMenuItems, 'proxmorphExpandBranch', currentRoot);
 assert.equal(findNode(currentRoot, 'node/pve01').isExpanded(), true);
 
 const nodeRecord = findNode(currentRoot, 'node/pve01');
-const nodeMenu = buildContextMenu('ProxMorph.overrides.NodeCmdMenu', nodeRecord);
-assert.equal(nodeMenu.menu.nativeInitCalled, true, 'native node menu remains intact');
+const nodeMenuItems = classRegistry['PVE.node.CmdMenu'].prototype.items;
+assert.equal(nodeMenuItems[0], nativeNodeMenuItem, 'native node menu configuration remains intact');
 assert.deepEqual(
-    nodeMenu.items.filter((item) => item.text).map((item) => item.text),
-    ['Expand branch', 'Collapse branch'],
+    nodeMenuItems.filter((item) => item.text).map((item) => item.text),
+    ['Create VM', 'Expand branch', 'Collapse branch'],
     'node context menu scopes expansion actions to the selected branch',
 );
-nodeMenu.items.find((item) => item.itemId === 'proxmorphCollapseBranch').handler();
+runContextAction(nodeMenuItems, 'proxmorphCollapseBranch', nodeRecord);
 assert.equal(nodeRecord.isExpanded(), false);
-nodeMenu.items.find((item) => item.itemId === 'proxmorphExpandBranch').handler();
+runContextAction(nodeMenuItems, 'proxmorphExpandBranch', nodeRecord);
 assert.equal(nodeRecord.isExpanded(), true);
 
 settingsButton.handler();
@@ -490,6 +497,8 @@ assert.match(
 );
 assert.equal(appliedView.id, 'proxmorph-inventory');
 assert.equal(rootText, 'pve.gnet.com', 'icon views use the current PVE host as the root label');
+assert.equal(currentRoot.dirty, false, 'root relabeling does not leave an ExtJS dirty marker');
+assert.ok(currentRoot.commitCount > 0, 'the presentation-only root label is committed');
 assert.deepEqual(appliedView.groups, ['pool']);
 assert.equal(appliedView.getFilterFn()({ data: { type: 'qemu', status: 'running' } }), false);
 assert.equal(appliedView.getFilterFn()({ data: { type: 'storage' } }), false);

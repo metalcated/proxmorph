@@ -13,7 +13,7 @@
  * protected API and the replicated Proxmox cluster filesystem. The selected
  * view itself continues to use Proxmox's native URL state.
  *
- * Version: 1.6.0
+ * Version: 1.6.1
  */
 (function () {
     'use strict';
@@ -24,7 +24,7 @@
     var CONNECTIVITY_VIEW_KEY = 'proxmorph-connectivity';
     var VNET_TYPE = 'proxmorph-vnet';
     var VNETS_URL = '/cluster/sdn/vnets';
-    var VERSION = '1.6.0';
+    var VERSION = '1.6.1';
     var PREFERENCES_URL = '/proxmorph/preferences';
     var MAX_INIT_ATTEMPTS = 40;
     var initAttempts = 0;
@@ -634,13 +634,8 @@
         updateExpansionMemory();
     }
 
-    function appendTreeContextActions(menu) {
-        var record = menu && menu.pveSelNode;
-        if (!record || !isExpandableNode(record) || !menu.add) {
-            return;
-        }
-        var rootAction = record.isRoot && record.isRoot();
-        menu.add([
+    function buildTreeContextActions(rootAction) {
+        return [
             {
                 xtype: 'menuseparator',
                 itemId: 'proxmorphTreeExpansionSeparator',
@@ -650,7 +645,8 @@
                 itemId: 'proxmorphExpandBranch',
                 iconCls: 'fa fa-fw fa-plus-square-o',
                 handler: function () {
-                    expandContextBranch(record);
+                    var menu = this.up ? this.up('menu') : null;
+                    expandContextBranch(menu && menu.pveSelNode);
                 },
             },
             {
@@ -658,10 +654,22 @@
                 itemId: 'proxmorphCollapseBranch',
                 iconCls: 'fa fa-fw fa-minus-square-o',
                 handler: function () {
-                    collapseContextBranch(record);
+                    var menu = this.up ? this.up('menu') : null;
+                    collapseContextBranch(menu && menu.pveSelNode);
                 },
             },
-        ]);
+        ];
+    }
+
+    function appendTreeContextActions(menuClass, rootAction) {
+        var prototype = menuClass && menuClass.prototype;
+        if (!prototype || prototype.__proxmorphTreeExpansionItems) {
+            return false;
+        }
+        var nativeItems = Array.isArray(prototype.items) ? prototype.items.slice() : [];
+        prototype.items = nativeItems.concat(buildTreeContextActions(rootAction));
+        prototype.__proxmorphTreeExpansionItems = true;
+        return true;
     }
 
     function installTreeContextActions(viewSelector, resourceTree) {
@@ -669,7 +677,6 @@
             typeof Ext === 'undefined' ||
             !Ext.ClassManager ||
             !Ext.ClassManager.get ||
-            !Ext.define ||
             !Ext.ClassManager.get('PVE.dc.CmdMenu') ||
             !Ext.ClassManager.get('PVE.node.CmdMenu')
         ) {
@@ -678,25 +685,8 @@
 
         treeContextResourceTree = resourceTree;
         treeContextViewSelector = viewSelector;
-
-        if (!Ext.ClassManager.get('ProxMorph.overrides.DatacenterCmdMenu')) {
-            Ext.define('ProxMorph.overrides.DatacenterCmdMenu', {
-                override: 'PVE.dc.CmdMenu',
-                initComponent: function () {
-                    this.callParent();
-                    appendTreeContextActions(this);
-                },
-            });
-        }
-        if (!Ext.ClassManager.get('ProxMorph.overrides.NodeCmdMenu')) {
-            Ext.define('ProxMorph.overrides.NodeCmdMenu', {
-                override: 'PVE.node.CmdMenu',
-                initComponent: function () {
-                    this.callParent();
-                    appendTreeContextActions(this);
-                },
-            });
-        }
+        appendTreeContextActions(Ext.ClassManager.get('PVE.dc.CmdMenu'), true);
+        appendTreeContextActions(Ext.ClassManager.get('PVE.node.CmdMenu'), false);
         return true;
     }
 
@@ -723,6 +713,9 @@
         }
         if (root.set) {
             root.set('text', hostname);
+            if (root.commit) {
+                root.commit();
+            }
         } else if (root.data) {
             root.data.text = hostname;
         }
