@@ -66,6 +66,10 @@ bash -n "$POST_INVOKE_SCRIPT"
 check 'generated update hook is valid shell' 0 "$?"
 grep -qF '\$dinfo = df' "$POST_INVOKE_SCRIPT"
 check 'generated update hook preserves the sensor anchor' 0 "$?"
+grep -qF 'backup "apt-repatch"' "$POST_INVOKE_SCRIPT"
+check 'generated update hook snapshots clean package files before re-patching' 0 "$?"
+grep -qF 'restore "$transaction_backup_id" --yes --force' "$POST_INVOKE_SCRIPT"
+check 'generated update hook has automatic rollback' 0 "$?"
 
 if [[ "$fail" -eq 0 ]]; then
     echo 'ALL PASS'

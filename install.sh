@@ -3,7 +3,7 @@
 # Supports: PVE 8.x/9.x, PBS 3.x/4.x, PDM 1.x
 # Integrates with native Proxmox theme selector
 
-set -e
+set -Ee
 
 # Colors for output
 RED='\033[0;31m'
@@ -15,13 +15,20 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Configuration
-VERSION="2.9.0"
+VERSION="2.10.0"
+TARGET_VERSION="$VERSION"
 WIDGET_TOOLKIT_DIR="/usr/share/javascript/proxmox-widget-toolkit"
 THEMES_DIR="${WIDGET_TOOLKIT_DIR}/themes"
 PROXMOXLIB_JS="${WIDGET_TOOLKIT_DIR}/proxmoxlib.js"
-BACKUP_DIR="/root/.proxmorph-backup"
+BACKUP_DIR="/root/.proxmorph-backup" # Legacy pre-v2.10 backup location
+BACKUP_ROOT="${PROXMORPH_BACKUP_ROOT:-/root/.proxmorph-backups}"
+BACKUP_SCHEMA_VERSION="1"
 GITHUB_REPO="IT-BAER/proxmorph"
 INSTALL_DIR="/opt/proxmorph"
+INSTALLED_PATHS_FILE="${INSTALL_DIR}/.installed-paths"
+CONFIG_DIR="${PROXMORPH_CONFIG_DIR:-/etc/proxmorph}"
+PROXMORPH_LOG_FILE="${PROXMORPH_LOG_FILE:-/var/log/proxmorph.log}"
+LOCK_FILE="${PROXMORPH_LOCK_FILE:-/run/lock/proxmorph.lock}"
 
 # Sensor support paths
 SENSORS_CONFIG="${INSTALL_DIR}/.sensors-enabled"
@@ -56,6 +63,14 @@ INDEX_TEMPLATE=""
 JS_PATCHES_DIR=""
 PROXY_SERVICE=""
 
+# Active mutation transaction. A failed install/update/reinstall/uninstall or
+# sensor change restores this snapshot automatically before exiting.
+TRANSACTION_BACKUP_ID=""
+TRANSACTION_ACTIVE=false
+TRANSACTION_ROLLING_BACK=false
+LAST_BACKUP_ID=""
+RELEASE_DOWNLOADED=false
+
 echo -e "${CYAN}"
 echo "╔═══════════════════════════════════════════════════════════╗"
 echo "║   ProxMorph Theme Collection for Proxmox VE, PBS & PDM   ║"
@@ -75,6 +90,20 @@ check_root() {
         print_error "This script must be run as root"
         exit 1
     fi
+}
+
+acquire_operation_lock() {
+    [[ "${PROXMORPH_SKIP_LOCK:-false}" == "true" ]] && return 0
+    command -v flock &>/dev/null || {
+        print_error "flock is required to protect backup and restore operations"
+        return 1
+    }
+    mkdir -p "$(dirname "$LOCK_FILE")"
+    exec 9>"$LOCK_FILE"
+    flock -n 9 || {
+        print_error "Another ProxMorph operation is already running"
+        return 1
+    }
 }
 
 # Check if Proxmox VE is installed
@@ -284,7 +313,7 @@ download_release() {
 
     if [[ -z "$version" ]]; then
         print_error "Could not determine latest version"
-        exit 1
+        return 1
     fi
 
     print_info "Downloading ProxMorph v${version}..."
@@ -296,7 +325,7 @@ download_release() {
     if ! curl -fsSL "${base}/${archive}" -o "${tmp_dir}/${archive}"; then
         print_error "Failed to download release v${version} from ${base}"
         rm -rf "$tmp_dir"
-        exit 1
+        return 1
     fi
 
     # Fetch the checksum manifest. Absence is fatal: without it we cannot verify
@@ -306,7 +335,7 @@ download_release() {
         print_error "Could not fetch SHA256SUMS for v${version} from ${base}"
         print_error "Refusing to install an unverifiable release. See README 'Verify before you run'."
         rm -rf "$tmp_dir"
-        exit 1
+        return 1
     fi
 
     print_info "Verifying checksum..."
@@ -314,7 +343,7 @@ download_release() {
         print_error "CHECKSUM VERIFICATION FAILED for ${archive}"
         print_error "The downloaded release does not match its published SHA256SUMS. Aborting."
         rm -rf "$tmp_dir"
-        exit 1
+        return 1
     fi
     print_status "Checksum verified"
 
@@ -326,6 +355,8 @@ download_release() {
 
     # Save version info
     echo "$version" > "${INSTALL_DIR}/.version"
+    TARGET_VERSION="$version"
+    RELEASE_DOWNLOADED=true
 
     print_status "Downloaded ProxMorph v${version}"
 }
@@ -356,36 +387,683 @@ check_updates() {
     fi
 }
 
-# Create backup of original files
-backup_files() {
-    mkdir -p "$BACKUP_DIR"
+# ─── Versioned Backup and Transactional Restore ─────────────────
+
+product_backup_dir() {
+    printf '%s/%s' "$BACKUP_ROOT" "$(printf '%s' "$PRODUCT" | tr '[:upper:]' '[:lower:]')"
+}
+
+path_exists() {
+    [[ -e "$1" || -L "$1" ]]
+}
+
+proxmorph_install_detected() {
+    local themes_source="${1:-}"
+    local css_file=""
+    local theme_key=""
+    [[ -f "$APT_HOOK_FILE" || -f "${INSTALL_DIR}/.version" ]] && return 0
+    [[ -f "$INDEX_TEMPLATE" ]] && grep -q 'ProxMorph' "$INDEX_TEMPLATE" 2>/dev/null && return 0
+    if [[ "$PRODUCT" != "PDM" && -f "$PROXMOXLIB_JS" && -d "$themes_source" ]]; then
+        for css_file in "$themes_source"/theme-*.css; do
+            [[ -f "$css_file" ]] || continue
+            theme_key=$(basename "$css_file" .css)
+            theme_key=${theme_key#theme-}
+            grep -qF "\"${theme_key}\":" "$PROXMOXLIB_JS" 2>/dev/null && return 0
+        done
+    fi
+    return 1
+}
+
+get_product_package_names() {
+    case "$PRODUCT" in
+        PVE) printf '%s\n' pve-manager proxmox-widget-toolkit ;;
+        PBS) printf '%s\n' proxmox-backup-server proxmox-widget-toolkit ;;
+        PDM) printf '%s\n' proxmox-datacenter-manager proxmox-datacenter-manager-ui ;;
+    esac
+}
+
+get_installed_package_version() {
+    local package="$1"
+    local version=""
+    if command -v dpkg-query &>/dev/null; then
+        version=$(dpkg-query -W -f='${Version}' "$package" 2>/dev/null || true)
+    fi
+    printf '%s' "${version:-ABSENT}"
+}
+
+capture_package_versions() {
+    local output="$1"
+    local package=""
+    : > "$output"
+    while IFS= read -r package; do
+        [[ -n "$package" ]] || continue
+        printf '%s\t%s\n' "$package" "$(get_installed_package_version "$package")" >> "$output"
+    done < <(get_product_package_names)
+}
+
+write_backup_pointer() {
+    local pointer="$1"
+    local backup_id="$2"
+    local temporary="${pointer}.tmp.$$"
+    printf '%s\n' "$backup_id" > "$temporary"
+    mv "$temporary" "$pointer"
+}
+
+add_backup_candidate() {
+    local candidate="$1"
+    local existing=""
+    [[ "$candidate" == /* ]] || return 1
+    [[ "$candidate" != *$'\n'* && "$candidate" != *$'\t'* ]] || return 1
+    for existing in "${BACKUP_CANDIDATES[@]:-}"; do
+        [[ "$existing" == "$candidate" ]] && return 0
+    done
+    BACKUP_CANDIDATES+=("$candidate")
+}
+
+collect_backup_candidates() {
+    local themes_source="${1:-}"
+    local source_dir=""
+    local css_file=""
+    local recorded_path=""
+    BACKUP_CANDIDATES=()
+
+    add_backup_candidate "$INDEX_TEMPLATE"
+    add_backup_candidate "$INSTALL_DIR"
+    add_backup_candidate "$APT_HOOK_FILE"
+    add_backup_candidate "$CONFIG_DIR"
+    add_backup_candidate "$PROXMORPH_LOG_FILE"
+
     if [[ "$PRODUCT" == "PDM" ]]; then
-        # PDM: back up index.hbs only
-        if [[ -f "$INDEX_TEMPLATE" && ! -f "${BACKUP_DIR}/index.hbs.original" ]]; then
-            cp "$INDEX_TEMPLATE" "${BACKUP_DIR}/index.hbs.original"
-            print_status "Created backup of index.hbs"
+        add_backup_candidate "$PDM_THEMES_DIR"
+        add_backup_candidate "$PDM_JS_PATCHES_DIR"
+    else
+        add_backup_candidate "$PROXMOXLIB_JS"
+        add_backup_candidate "$JS_PATCHES_DIR"
+    fi
+    [[ "$PRODUCT" == "PVE" ]] && add_backup_candidate "$NODES_PM"
+
+    # Preserve every live theme file that the current or incoming release owns,
+    # without copying the package's entire stock theme directory.
+    for source_dir in "$themes_source" "${INSTALL_DIR}/themes"; do
+        [[ -n "$source_dir" && -d "$source_dir" ]] || continue
+        if [[ "$PRODUCT" == "PDM" ]]; then
+            continue
         fi
-    elif [[ -f "$PROXMOXLIB_JS" && ! -f "${BACKUP_DIR}/proxmoxlib.js.original" ]]; then
-        cp "$PROXMOXLIB_JS" "${BACKUP_DIR}/proxmoxlib.js.original"
-        print_status "Created backup of proxmoxlib.js"
+        for css_file in "$source_dir"/theme-*.css; do
+            [[ -f "$css_file" ]] || continue
+            add_backup_candidate "${THEMES_DIR}/$(basename "$css_file")"
+        done
+    done
+
+    # The installed-path ledger carries destination names forward when a later
+    # release removes or renames an asset.
+    if [[ -f "$INSTALLED_PATHS_FILE" ]]; then
+        while IFS= read -r recorded_path; do
+            [[ -n "$recorded_path" ]] || continue
+            if backup_path_is_allowed "$recorded_path"; then
+                add_backup_candidate "$recorded_path"
+            fi
+        done < "$INSTALLED_PATHS_FILE"
     fi
 }
 
-# Restore from package (clean state)
-restore_packages() {
-    if [[ "$PRODUCT" == "PDM" ]]; then
-        # PDM: restore index.hbs from backup
-        if [[ -f "${BACKUP_DIR}/index.hbs.original" ]]; then
-            cp "${BACKUP_DIR}/index.hbs.original" "$INDEX_TEMPLATE"
-            print_status "Restored index.hbs from backup"
-        else
-            print_warning "No index.hbs backup found — manually reinstall proxmox-datacenter-manager-ui"
+backup_path_is_allowed() {
+    local path="$1"
+    case "$path" in
+        "$INDEX_TEMPLATE"|"$INSTALL_DIR"|"$APT_HOOK_FILE"|"$CONFIG_DIR"|"$PROXMORPH_LOG_FILE") return 0 ;;
+        "$PROXMOXLIB_JS") [[ "$PRODUCT" == "PVE" || "$PRODUCT" == "PBS" ]] && return 0 ;;
+        "$JS_PATCHES_DIR") return 0 ;;
+        "$NODES_PM") [[ "$PRODUCT" == "PVE" ]] && return 0 ;;
+        "$PDM_THEMES_DIR"|"$PDM_JS_PATCHES_DIR") [[ "$PRODUCT" == "PDM" ]] && return 0 ;;
+        "$THEMES_DIR"/theme-*.css)
+            [[ "$(dirname "$path")" == "$THEMES_DIR" ]] && return 0
+            ;;
+    esac
+    return 1
+}
+
+regenerate_backup_checksums() {
+    local backup_dir="$1"
+    local checksum_file="${backup_dir}/SHA256SUMS"
+    local relative=""
+    (
+        cd "$backup_dir"
+        : > "${checksum_file}.tmp"
+        for relative in metadata.env inventory.tsv package-versions.tsv remote-inventory.tsv; do
+            [[ -f "$relative" ]] && sha256sum "$relative" >> "${checksum_file}.tmp"
+        done
+        while IFS= read -r -d '' relative; do
+            sha256sum "$relative" >> "${checksum_file}.tmp"
+        done < <(find rootfs remote -type f -print0 2>/dev/null | sort -z)
+        sort -k2 "${checksum_file}.tmp" > "${checksum_file}.new"
+        mv "${checksum_file}.new" "$checksum_file"
+        rm -f "${checksum_file}.tmp"
+    )
+}
+
+create_backup() {
+    local reason="${1:-manual}"
+    local themes_source="${2:-}"
+    local product_dir=""
+    local backup_id=""
+    local backup_dir=""
+    local path=""
+    local state=""
+    local had_install=false
+
+    proxmorph_install_detected "$themes_source" && had_install=true
+    product_dir=$(product_backup_dir)
+    backup_id="$(date -u '+%Y%m%dT%H%M%SZ')-$(printf '%s' "$PRODUCT" | tr '[:upper:]' '[:lower:]')-$$-${RANDOM}"
+    backup_dir="${product_dir}/${backup_id}"
+
+    mkdir -p "${backup_dir}/rootfs"
+    chmod 700 "$BACKUP_ROOT" "$product_dir" "$backup_dir" 2>/dev/null || true
+    reason=$(printf '%s' "$reason" | tr -cd '[:alnum:]_.-')
+
+    {
+        printf 'schema=%s\n' "$BACKUP_SCHEMA_VERSION"
+        printf 'id=%s\n' "$backup_id"
+        printf 'product=%s\n' "$PRODUCT"
+        printf 'created_utc=%s\n' "$(date -u '+%Y-%m-%dT%H:%M:%SZ')"
+        printf 'hostname=%s\n' "$(hostname 2>/dev/null || printf unknown)"
+        printf 'reason=%s\n' "${reason:-manual}"
+        printf 'proxmorph_version=%s\n' "$VERSION"
+        printf 'preexisting_install=%s\n' "$had_install"
+    } > "${backup_dir}/metadata.env"
+    capture_package_versions "${backup_dir}/package-versions.tsv"
+    : > "${backup_dir}/inventory.tsv"
+
+    collect_backup_candidates "$themes_source"
+    for path in "${BACKUP_CANDIDATES[@]}"; do
+        backup_path_is_allowed "$path" || {
+            print_error "Refusing to back up unexpected path: $path"
+            return 1
+        }
+        state="absent"
+        if path_exists "$path"; then
+            state="present"
+            mkdir -p "${backup_dir}/rootfs$(dirname "$path")"
+            cp -a "$path" "${backup_dir}/rootfs${path}"
         fi
+        printf '%s\t%s\n' "$state" "$path" >> "${backup_dir}/inventory.tsv"
+    done
+
+    regenerate_backup_checksums "$backup_dir"
+    : > "${backup_dir}/.complete"
+    write_backup_pointer "${product_dir}/latest" "$backup_id"
+    if [[ ! -f "${product_dir}/baseline" && "$had_install" == "false" ]]; then
+        write_backup_pointer "${product_dir}/baseline" "$backup_id"
+        print_status "Created clean uninstall baseline: ${backup_id}"
+    fi
+
+    LAST_BACKUP_ID="$backup_id"
+    print_status "Created full ${PRODUCT} backup: ${backup_id}"
+}
+
+extend_backup_inventory() {
+    local backup_id="$1"
+    local themes_source="${2:-}"
+    local backup_dir=""
+    local path=""
+    local state=""
+    backup_dir="$(product_backup_dir)/${backup_id}"
+    [[ -d "$backup_dir" ]] || return 1
+
+    collect_backup_candidates "$themes_source"
+    for path in "${BACKUP_CANDIDATES[@]}"; do
+        grep -qF $'\t'"${path}" "${backup_dir}/inventory.tsv" 2>/dev/null && continue
+        backup_path_is_allowed "$path" || return 1
+        state="absent"
+        if path_exists "$path"; then
+            state="present"
+            mkdir -p "${backup_dir}/rootfs$(dirname "$path")"
+            cp -a "$path" "${backup_dir}/rootfs${path}"
+        fi
+        printf '%s\t%s\n' "$state" "$path" >> "${backup_dir}/inventory.tsv"
+    done
+    regenerate_backup_checksums "$backup_dir"
+}
+
+extend_uninstall_baseline() {
+    local themes_source="${1:-}"
+    local product_dir=""
+    local baseline_id=""
+    product_dir=$(product_backup_dir)
+    [[ -f "${product_dir}/baseline" ]] || return 0
+    baseline_id=$(tr -d ' \t\r\n' < "${product_dir}/baseline")
+    [[ -n "$baseline_id" && "$baseline_id" != "$TRANSACTION_BACKUP_ID" ]] || return 0
+    verify_backup "${product_dir}/${baseline_id}" || return 1
+    # Add only previously unknown destination names while they are still
+    # untouched. Existing inventory entries are never replaced.
+    extend_backup_inventory "$baseline_id" "$themes_source"
+}
+
+backup_metadata_value() {
+    local backup_dir="$1"
+    local key="$2"
+    awk -F= -v wanted="$key" '$1 == wanted { sub(/^[^=]*=/, ""); print; exit }' "${backup_dir}/metadata.env"
+}
+
+resolve_backup_id() {
+    local requested="${1:-latest}"
+    local product_dir=""
+    product_dir=$(product_backup_dir)
+    case "$requested" in
+        latest|baseline)
+            [[ -f "${product_dir}/${requested}" ]] || return 1
+            requested=$(tr -d ' \t\r\n' < "${product_dir}/${requested}")
+            ;;
+    esac
+    [[ "$requested" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+    [[ -d "${product_dir}/${requested}" ]] || return 1
+    printf '%s' "$requested"
+}
+
+verify_backup() {
+    local backup_dir="$1"
+    [[ -f "${backup_dir}/.complete" && -f "${backup_dir}/SHA256SUMS" ]] || {
+        print_error "Backup is incomplete: $(basename "$backup_dir")"
+        return 1
+    }
+    (cd "$backup_dir" && sha256sum -c SHA256SUMS >/dev/null) || {
+        print_error "Backup checksum verification failed: $(basename "$backup_dir")"
+        return 1
+    }
+    return 0
+}
+
+verify_backup_package_versions() {
+    local backup_dir="$1"
+    local package=""
+    local saved_version=""
+    local current_version=""
+    while IFS=$'\t' read -r package saved_version; do
+        [[ -n "$package" ]] || continue
+        current_version=$(get_installed_package_version "$package")
+        if [[ "$saved_version" != "$current_version" ]]; then
+            print_error "Package version mismatch for ${package}: backup=${saved_version}, current=${current_version}"
+            return 1
+        fi
+    done < "${backup_dir}/package-versions.tsv"
+    return 0
+}
+
+confirm_destructive_action() {
+    local prompt="$1"
+    local assume_yes="${2:-false}"
+    local reply=""
+    [[ "$assume_yes" == "true" ]] && return 0
+    if [[ ! -t 0 ]]; then
+        print_error "Confirmation required; re-run with --yes"
+        return 1
+    fi
+    read -r -p "${prompt} [y/N]: " reply
+    case "$reply" in
+        [Yy]|[Yy][Ee][Ss]) return 0 ;;
+        *) print_info "Cancelled"; return 1 ;;
+    esac
+}
+
+remove_exact_path() {
+    local path="$1"
+    backup_path_is_allowed "$path" || {
+        print_error "Refusing to remove unexpected path: $path"
+        return 1
+    }
+    if [[ -d "$path" && ! -L "$path" ]]; then
+        rm -rf -- "$path"
+    else
+        rm -f -- "$path"
+    fi
+}
+
+restore_local_inventory() {
+    local backup_dir="$1"
+    local scope="${2:-all}"
+    local state=""
+    local path=""
+    local source_path=""
+    while IFS=$'\t' read -r state path; do
+        [[ -n "$path" ]] || continue
+        backup_path_is_allowed "$path" || {
+            print_error "Backup contains an unexpected restore path: $path"
+            return 1
+        }
+        if [[ "$scope" == "nonpackage" ]]; then
+            case "$path" in
+                "$INDEX_TEMPLATE"|"$PROXMOXLIB_JS"|"$NODES_PM") continue ;;
+            esac
+            # On a cross-version uninstall, the currently installed package
+            # wins if it has since claimed a formerly custom destination.
+            if command -v dpkg &>/dev/null && dpkg -S "$path" &>/dev/null; then
+                continue
+            fi
+        elif [[ "$scope" == "package" ]]; then
+            case "$path" in
+                "$INDEX_TEMPLATE"|"$PROXMOXLIB_JS"|"$NODES_PM") ;;
+                *) continue ;;
+            esac
+        fi
+        source_path="${backup_dir}/rootfs${path}"
+        case "$state" in
+            present)
+                path_exists "$source_path" || {
+                    print_error "Backup payload is missing: $path"
+                    return 1
+                }
+                if path_exists "$path"; then
+                    remove_exact_path "$path" || return 1
+                fi
+                mkdir -p "$(dirname "$path")" || return 1
+                cp -a "$source_path" "$path" || return 1
+                ;;
+            absent)
+                if path_exists "$path"; then
+                    remove_exact_path "$path" || return 1
+                fi
+                ;;
+            *)
+                print_error "Invalid backup inventory state '${state}' for ${path}"
+                return 1
+                ;;
+        esac
+    done < "${backup_dir}/inventory.tsv"
+}
+
+restore_remote_inventory() {
+    local backup_dir="$1"
+    local state=""
+    local node=""
+    local path=""
+    local safe_node=""
+    local source_path=""
+    [[ -f "${backup_dir}/remote-inventory.tsv" ]] || return 0
+
+    while IFS=$'\t' read -r state node path; do
+        [[ "$node" =~ ^[A-Za-z0-9._-]+$ ]] || {
+            print_error "Backup contains an invalid remote node name: $node"
+            return 1
+        }
+        case "$path" in
+            "$NODES_PM"|"$SENSORS_FILTER") ;;
+            *) print_error "Backup contains an unexpected remote path: $path"; return 1 ;;
+        esac
+        safe_node=$(printf '%s' "$node" | tr -cd 'A-Za-z0-9._-')
+        source_path="${backup_dir}/remote/${safe_node}/rootfs${path}"
+        if [[ "$state" == "present" ]]; then
+            [[ -f "$source_path" ]] || {
+                print_error "Remote backup payload is missing for ${node}:${path}"
+                return 1
+            }
+            ssh -n -o ConnectTimeout=5 "root@${node}" "mkdir -p '$(dirname "$path")'" >/dev/null || return 1
+            scp -o ConnectTimeout=5 -p -q "$source_path" "root@${node}:${path}" || return 1
+        elif [[ "$state" == "absent" && "$path" == "$SENSORS_FILTER" ]]; then
+            ssh -n -o ConnectTimeout=5 "root@${node}" "rm -f -- '${path}'" >/dev/null || return 1
+        elif [[ "$state" != "absent" ]]; then
+            print_error "Invalid remote backup inventory state '${state}'"
+            return 1
+        fi
+        ssh -n -o ConnectTimeout=5 "root@${node}" "systemctl restart pveproxy" >/dev/null || return 1
+        print_status "Restored remote sensor state on ${node}"
+    done < "${backup_dir}/remote-inventory.tsv"
+}
+
+snapshot_remote_nodes_before_restore() {
+    local backup_dir="$1"
+    local node=""
+    [[ -f "${backup_dir}/remote-inventory.tsv" ]] || return 0
+    [[ "$TRANSACTION_ACTIVE" == "true" && -n "$TRANSACTION_BACKUP_ID" ]] || {
+        print_error "A transaction backup is required before restoring remote sensor files"
+        return 1
+    }
+    while IFS= read -r node; do
+        [[ -n "$node" ]] || continue
+        backup_remote_sensor_state "$node" || return 1
+    done < <(awk -F '\t' '{print $2}' "${backup_dir}/remote-inventory.tsv" | sort -u)
+}
+
+restore_backup_internal() {
+    local requested="${1:-latest}"
+    local assume_yes="${2:-false}"
+    local force_version="${3:-false}"
+    local backup_id=""
+    local backup_dir=""
+    local backup_product=""
+
+    backup_id=$(resolve_backup_id "$requested") || {
+        print_error "Backup not found for ${PRODUCT}: ${requested}"
+        return 1
+    }
+    backup_dir="$(product_backup_dir)/${backup_id}"
+    verify_backup "$backup_dir" || return 1
+    backup_product=$(backup_metadata_value "$backup_dir" product)
+    [[ "$backup_product" == "$PRODUCT" ]] || {
+        print_error "Backup product ${backup_product} does not match detected product ${PRODUCT}"
+        return 1
+    }
+    if [[ "$force_version" != "true" ]]; then
+        verify_backup_package_versions "$backup_dir" || {
+            print_error "Refusing to overwrite files from a different package version. Use --force only after reviewing the mismatch."
+            return 1
+        }
+    fi
+    confirm_destructive_action "Restore backup ${backup_id}? Current ProxMorph-managed files will be replaced" "$assume_yes" || return 1
+
+    if [[ "$TRANSACTION_ACTIVE" == "true" && "$TRANSACTION_BACKUP_ID" != "$backup_id" ]]; then
+        snapshot_remote_nodes_before_restore "$backup_dir" || return 1
+    fi
+    restore_local_inventory "$backup_dir" || return 1
+    restore_remote_inventory "$backup_dir" || return 1
+    if command -v systemctl &>/dev/null && [[ -n "$PROXY_SERVICE" ]]; then
+        systemctl restart "$PROXY_SERVICE" 2>/dev/null || true
+    fi
+    print_status "Restored ${PRODUCT} backup: ${backup_id}"
+}
+
+restore_backup() {
+    local requested="${1:-latest}"
+    shift || true
+    local assume_yes=false
+    local force_version=false
+    local arg=""
+    local backup_id=""
+    local backup_dir=""
+    local backup_product=""
+    for arg in "$@"; do
+        case "$arg" in
+            --yes) assume_yes=true ;;
+            --force) force_version=true ;;
+            *) print_error "Unknown restore option: $arg"; return 1 ;;
+        esac
+    done
+
+    # Resolve "latest" before creating the pre-restore transaction snapshot,
+    # otherwise the new safety snapshot would become the restore target.
+    backup_id=$(resolve_backup_id "$requested") || {
+        print_error "Backup not found for ${PRODUCT}: ${requested}"
+        return 1
+    }
+    backup_dir="$(product_backup_dir)/${backup_id}"
+    verify_backup "$backup_dir" || return 1
+    backup_product=$(backup_metadata_value "$backup_dir" product)
+    [[ "$backup_product" == "$PRODUCT" ]] || {
+        print_error "Backup product ${backup_product} does not match detected product ${PRODUCT}"
+        return 1
+    }
+    if [[ "$force_version" != "true" ]]; then
+        verify_backup_package_versions "$backup_dir" || {
+            print_error "Refusing to overwrite files from a different package version. Use --force only after reviewing the mismatch."
+            return 1
+        }
+    fi
+    confirm_destructive_action "Restore backup ${backup_id}? Current ProxMorph-managed files will be replaced" "$assume_yes" || return 1
+
+    if [[ "$TRANSACTION_ACTIVE" != "true" ]]; then
+        begin_transaction "pre-restore" "$(get_themes_source || true)"
+    fi
+    restore_backup_internal "$backup_id" true "$force_version" || return 1
+    commit_transaction
+}
+
+list_backups() {
+    local product_dir=""
+    local backup_dir=""
+    local backup_id=""
+    local baseline_id=""
+    product_dir=$(product_backup_dir)
+    [[ -d "$product_dir" ]] || {
+        print_info "No ${PRODUCT} backups found"
+        return 0
+    }
+    [[ -f "${product_dir}/baseline" ]] && baseline_id=$(tr -d ' \t\r\n' < "${product_dir}/baseline")
+    print_info "Available ${PRODUCT} backups:"
+    for backup_dir in "${product_dir}"/*; do
+        [[ -d "$backup_dir" && -f "${backup_dir}/.complete" ]] || continue
+        backup_id=$(basename "$backup_dir")
+        printf '  %s  %s  reason=%s%s\n' \
+            "$backup_id" \
+            "$(backup_metadata_value "$backup_dir" created_utc)" \
+            "$(backup_metadata_value "$backup_dir" reason)" \
+            "$([[ "$backup_id" == "$baseline_id" ]] && printf '  [baseline]')"
+    done
+}
+
+find_current_clean_package_backup() {
+    local product_dir=""
+    local backup_dir=""
+    local found=""
+    product_dir=$(product_backup_dir)
+    [[ -d "$product_dir" ]] || return 1
+    for backup_dir in "${product_dir}"/*; do
+        [[ -d "$backup_dir" && -f "${backup_dir}/.complete" ]] || continue
+        [[ "$(backup_metadata_value "$backup_dir" reason)" == "apt-repatch" ]] || continue
+        if verify_backup "$backup_dir" >/dev/null 2>&1 && \
+           verify_backup_package_versions "$backup_dir" >/dev/null 2>&1; then
+            found=$(basename "$backup_dir")
+        fi
+    done
+    [[ -n "$found" ]] || return 1
+    printf '%s' "$found"
+}
+
+begin_transaction() {
+    local reason="$1"
+    local themes_source="${2:-}"
+    if [[ "$TRANSACTION_ACTIVE" == "true" ]]; then
         return 0
     fi
-    print_info "Reinstalling widget toolkit to clean state..."
-    apt-get -qq -o Dpkg::Use-Pty=0 reinstall proxmox-widget-toolkit 2>/dev/null
-    print_status "Restored proxmox-widget-toolkit"
+    create_backup "$reason" "$themes_source"
+    TRANSACTION_BACKUP_ID="$LAST_BACKUP_ID"
+    TRANSACTION_ACTIVE=true
+    trap 'rollback_transaction $?' ERR
+    trap 'rollback_transaction 130' INT
+    trap 'rollback_transaction 143' TERM
+}
+
+commit_transaction() {
+    trap - ERR INT TERM
+    TRANSACTION_ACTIVE=false
+    TRANSACTION_BACKUP_ID=""
+}
+
+rollback_transaction() {
+    local status="${1:-1}"
+    trap - ERR INT TERM
+    [[ "$TRANSACTION_ROLLING_BACK" == "true" ]] && exit "$status"
+    TRANSACTION_ROLLING_BACK=true
+    set +e
+    if [[ "$TRANSACTION_ACTIVE" == "true" && -n "$TRANSACTION_BACKUP_ID" ]]; then
+        print_error "Operation failed; restoring backup ${TRANSACTION_BACKUP_ID}"
+        if restore_backup_internal "$TRANSACTION_BACKUP_ID" true true; then
+            print_status "Automatic rollback completed"
+        else
+            print_error "Automatic rollback failed. Run: $0 restore ${TRANSACTION_BACKUP_ID} --yes --force"
+        fi
+    fi
+    exit "$status"
+}
+
+backup_remote_path_to() {
+    local backup_id="$1"
+    local node="$2"
+    local path="$3"
+    local backup_dir=""
+    local safe_node=""
+    local state="absent"
+    local destination=""
+    local remote_state=""
+
+    [[ "$node" =~ ^[A-Za-z0-9._-]+$ ]] || return 1
+    case "$path" in
+        "$NODES_PM"|"$SENSORS_FILTER") ;;
+        *) return 1 ;;
+    esac
+    backup_dir="$(product_backup_dir)/${backup_id}"
+    [[ -d "$backup_dir" ]] || return 1
+    [[ -f "${backup_dir}/remote-inventory.tsv" ]] || : > "${backup_dir}/remote-inventory.tsv"
+    grep -qF $'\t'"${node}"$'\t'"${path}" "${backup_dir}/remote-inventory.tsv" 2>/dev/null && return 0
+
+    safe_node=$(printf '%s' "$node" | tr -cd 'A-Za-z0-9._-')
+    destination="${backup_dir}/remote/${safe_node}/rootfs${path}"
+    remote_state=$(ssh -n -o ConnectTimeout=5 "root@${node}" \
+        "if [ -e '${path}' ]; then printf PRESENT; else printf ABSENT; fi" 2>/dev/null) || return 1
+    if [[ "$remote_state" == "PRESENT" ]]; then
+        state="present"
+        mkdir -p "$(dirname "$destination")" || return 1
+        scp -o ConnectTimeout=5 -p -q "root@${node}:${path}" "$destination" || return 1
+    elif [[ "$remote_state" != "ABSENT" || "$path" == "$NODES_PM" ]]; then
+        return 1
+    fi
+    printf '%s\t%s\t%s\n' "$state" "$node" "$path" >> "${backup_dir}/remote-inventory.tsv"
+    regenerate_backup_checksums "$backup_dir" || return 1
+}
+
+backup_remote_sensor_state() {
+    local node="$1"
+    local product_dir=""
+    local baseline_id=""
+    [[ "$TRANSACTION_ACTIVE" == "true" && -n "$TRANSACTION_BACKUP_ID" ]] || return 1
+    backup_remote_path_to "$TRANSACTION_BACKUP_ID" "$node" "$NODES_PM" || return 1
+    backup_remote_path_to "$TRANSACTION_BACKUP_ID" "$node" "$SENSORS_FILTER" || return 1
+
+    product_dir=$(product_backup_dir)
+    if [[ -f "${product_dir}/baseline" ]]; then
+        baseline_id=$(tr -d ' \t\r\n' < "${product_dir}/baseline")
+        if [[ "$baseline_id" != "$TRANSACTION_BACKUP_ID" ]]; then
+            backup_remote_path_to "$baseline_id" "$node" "$NODES_PM" || return 1
+            backup_remote_path_to "$baseline_id" "$node" "$SENSORS_FILTER" || return 1
+        fi
+    fi
+}
+
+record_installed_path() {
+    local path="$1"
+    backup_path_is_allowed "$path" || return 1
+    mkdir -p "$INSTALL_DIR"
+    touch "$INSTALLED_PATHS_FILE"
+    grep -qxF "$path" "$INSTALLED_PATHS_FILE" 2>/dev/null || printf '%s\n' "$path" >> "$INSTALLED_PATHS_FILE"
+}
+
+# Restore package-owned files before a reinstall. This deliberately uses the
+# currently installed package version instead of the stale legacy snapshot.
+restore_packages() {
+    local package="proxmox-widget-toolkit"
+    [[ "$PRODUCT" == "PDM" ]] && package="proxmox-datacenter-manager-ui"
+    print_info "Reinstalling ${package} to clean package-owned files..."
+    apt-get -qq -o Dpkg::Use-Pty=0 reinstall "$package" 2>/dev/null
+    print_status "Restored ${package}"
+}
+
+restore_all_product_packages() {
+    local packages=()
+    case "$PRODUCT" in
+        PVE) packages=(pve-manager proxmox-widget-toolkit) ;;
+        PBS) packages=(proxmox-backup-server proxmox-widget-toolkit) ;;
+        PDM) packages=(proxmox-datacenter-manager-ui) ;;
+    esac
+    print_info "Reinstalling current ${PRODUCT} web packages for a clean uninstall..."
+    apt-get -qq -o Dpkg::Use-Pty=0 reinstall "${packages[@]}" 2>/dev/null
+    print_status "Restored current ${PRODUCT} package-owned files"
 }
 
 # Extract theme title from CSS file (first line comment)
@@ -441,7 +1119,7 @@ JS_PATCH_MARKER="<!-- ProxMorph JS Patches -->"
 JS_PATCH_MARKER_END="<!-- /ProxMorph JS Patches -->"
 
 # Server-side default theme (issue #52)
-DEFAULT_THEME_FILE="/etc/proxmorph/default-theme"
+DEFAULT_THEME_FILE="${CONFIG_DIR}/default-theme"
 DEFAULT_THEME_MARKER="<!-- ProxMorph Default Theme -->"
 DEFAULT_THEME_MARKER_END="<!-- /ProxMorph Default Theme -->"
 
@@ -484,6 +1162,7 @@ install_js_patches() {
             print_theme "Installed: $(basename "$js_file")"
         fi
     done
+    record_installed_path "$JS_PATCHES_DIR"
     
     # Patch index template to load JS files
     if [[ -f "$INDEX_TEMPLATE" ]]; then
@@ -609,6 +1288,7 @@ BLOCK
 # CLI: ./install.sh default-theme [key|none]
 manage_default_theme() {
     local arg="${1:-}"
+    local owns_transaction=false
 
     if [[ -z "$arg" ]]; then
         local current=$(get_default_theme)
@@ -625,6 +1305,23 @@ manage_default_theme() {
         return 0
     fi
 
+    if [[ "$arg" != "none" ]]; then
+        if [[ "$PRODUCT" == "PDM" ]]; then
+            if [[ ! -f "${PDM_THEMES_DIR}/theme-${arg}.css" ]]; then
+                print_error "Theme 'theme-${arg}.css' is not installed"
+                return 1
+            fi
+        elif [[ ! -f "${THEMES_DIR}/theme-${arg}.css" ]]; then
+            print_error "Theme 'theme-${arg}.css' is not installed"
+            return 1
+        fi
+    fi
+
+    if [[ "$TRANSACTION_ACTIVE" != "true" ]]; then
+        begin_transaction "default-theme"
+        owns_transaction=true
+    fi
+
     if [[ "$arg" == "none" ]]; then
         rm -f "$DEFAULT_THEME_FILE"
         if [[ "$PRODUCT" == "PDM" ]]; then
@@ -635,15 +1332,6 @@ manage_default_theme() {
         fi
         print_status "Server-side default theme removed"
     else
-        if [[ "$PRODUCT" == "PDM" ]]; then
-            if [[ ! -f "${PDM_THEMES_DIR}/theme-${arg}.css" ]]; then
-                print_error "Theme 'theme-${arg}.css' is not installed"
-                exit 1
-            fi
-        elif [[ ! -f "${THEMES_DIR}/theme-${arg}.css" ]]; then
-            print_error "Theme 'theme-${arg}.css' is not installed"
-            exit 1
-        fi
         mkdir -p "$(dirname "$DEFAULT_THEME_FILE")"
         echo "$arg" > "$DEFAULT_THEME_FILE"
         if [[ "$PRODUCT" == "PDM" ]]; then
@@ -657,6 +1345,9 @@ manage_default_theme() {
 
     print_info "Restarting ${PROXY_SERVICE} service in background..."
     nohup systemctl restart "${PROXY_SERVICE}" &>/dev/null &
+    if [[ "$owns_transaction" == "true" ]]; then
+        commit_transaction
+    fi
 }
 
 # Install PDM CSS theme overrides into index.hbs
@@ -768,6 +1459,8 @@ JSBLOCK
         rm -f "$tmpblock"
 
         print_status "Injected ${theme_count} theme(s) + base styles + selector patch into $(basename "$INDEX_TEMPLATE")"
+        record_installed_path "$PDM_THEMES_DIR"
+        record_installed_path "$PDM_JS_PATCHES_DIR"
     else
         print_warning "$(basename "$INDEX_TEMPLATE") not found — PDM themes may not load"
     fi
@@ -814,7 +1507,7 @@ INDEX_TEMPLATE="${INDEX_TEMPLATE}"
 PVE_MANAGER_JS="${PVE_MANAGER_JS}"
 JS_PATCHES_DIR="${JS_PATCHES_DIR}"
 PROXY_SERVICE="${PROXY_SERVICE}"
-LOG_FILE="/var/log/proxmorph.log"
+LOG_FILE="${PROXMORPH_LOG_FILE}"
 JS_PATCH_MARKER="${JS_PATCH_MARKER}"
 JS_PATCH_MARKER_END="${JS_PATCH_MARKER_END}"
 PDM_CSS_MARKER="${PDM_CSS_MARKER}"
@@ -825,6 +1518,8 @@ DEFAULT_THEME_MARKER="${DEFAULT_THEME_MARKER}"
 DEFAULT_THEME_MARKER_END="${DEFAULT_THEME_MARKER_END}"
 THEME_COOKIE="${THEME_COOKIE}"
 THEME_WEB_PATH="${THEME_WEB_PATH}"
+BACKUP_ROOT="${BACKUP_ROOT}"
+LOCK_FILE="${LOCK_FILE}"
 
 # Set themes source based on product
 if [ "\$PRODUCT" = "PDM" ]; then
@@ -836,6 +1531,13 @@ fi
 log() {
     echo "[\$(date '+%Y-%m-%d %H:%M:%S')] \$1" >> "\$LOG_FILE"
 }
+
+mkdir -p "\$(dirname "\$LOCK_FILE")"
+exec 9>"\$LOCK_FILE"
+if ! flock -n 9; then
+    log "Another ProxMorph operation is active; skipping this re-patch pass"
+    exit 0
+fi
 
 # Only proceed if themes are installed
 if [ ! -d "\$THEMES_SOURCE" ]; then
@@ -917,6 +1619,33 @@ if [ "\$needs_repatch" = "true" ]; then
         log "ERROR: Proxmox update is not compatible with the installed ProxMorph patch set: \$compatibility_error. No files changed."
         exit 0
     fi
+
+    # The package update has now supplied clean, current-version files. Snapshot
+    # the complete ProxMorph footprint before re-patching them, then restore that
+    # snapshot automatically if any command below fails.
+    if ! PROXMORPH_SKIP_LOCK=true PROXMORPH_BACKUP_ROOT="\$BACKUP_ROOT" "\${INSTALL_DIR}/install.sh" backup "apt-repatch" >> "\$LOG_FILE" 2>&1; then
+        log "ERROR: Could not create the pre-repatch backup. New package files were left untouched."
+        exit 0
+    fi
+    product_slug=\$(printf '%s' "\$PRODUCT" | tr '[:upper:]' '[:lower:]')
+    transaction_backup_id=\$(tr -d ' \t\r\n' < "\${BACKUP_ROOT}/\${product_slug}/latest" 2>/dev/null || true)
+    if [ -z "\$transaction_backup_id" ]; then
+        log "ERROR: Backup completed without a resolvable backup ID. New package files were left untouched."
+        exit 0
+    fi
+    rollback_repatch() {
+        trap - ERR
+        set +e
+        log "ERROR: Re-patch failed; restoring backup \$transaction_backup_id"
+        if PROXMORPH_SKIP_LOCK=true PROXMORPH_BACKUP_ROOT="\$BACKUP_ROOT" "\${INSTALL_DIR}/install.sh" restore "\$transaction_backup_id" --yes --force >> "\$LOG_FILE" 2>&1; then
+            log "Automatic re-patch rollback completed"
+        else
+            log "CRITICAL: Automatic rollback failed. Run \${INSTALL_DIR}/install.sh restore \$transaction_backup_id --yes --force"
+        fi
+        exit 0
+    }
+    set -Ee
+    trap rollback_repatch ERR
 
     log "Detected \$PRODUCT update, re-applying ProxMorph patches..."
 
@@ -1118,6 +1847,7 @@ DTBLOCK
 
     # Restart proxy service to apply changes
     systemctl restart "\$PROXY_SERVICE" 2>/dev/null || true
+    trap - ERR
     log "ProxMorph patches re-applied successfully"
 fi
 SCRIPT
@@ -1433,13 +2163,6 @@ patch_nodes_pm() {
         sed -i "/${SENSORS_PATCH_MARKER}/,/${SENSORS_PATCH_MARKER} END/d" "$NODES_PM"
     fi
 
-    # Backup Nodes.pm
-    if [[ ! -f "${BACKUP_DIR}/Nodes.pm.original" ]]; then
-        mkdir -p "$BACKUP_DIR"
-        cp "$NODES_PM" "${BACKUP_DIR}/Nodes.pm.original"
-        print_info "Backed up Nodes.pm"
-    fi
-
     # Insert sensor data collection before 'my $dinfo = df('/', 1);'
     sed -i "/^\s*my \$dinfo = df/i\\
     ${SENSORS_PATCH_MARKER}\\
@@ -1466,7 +2189,9 @@ patch_nodes_pm() {
 
     if ! perl -c "$NODES_PM" 2>/dev/null; then
         print_error "Nodes.pm syntax broken after sensor patch, rolling back"
-        if [[ -f "${BACKUP_DIR}/Nodes.pm.original" ]]; then
+        if [[ "$TRANSACTION_ACTIVE" == "true" ]]; then
+            print_info "The active full backup will restore Nodes.pm and all other changed files"
+        elif [[ -f "${BACKUP_DIR}/Nodes.pm.original" ]]; then
             cp "${BACKUP_DIR}/Nodes.pm.original" "$NODES_PM"
             print_info "Restored Nodes.pm from backup"
         else
@@ -1539,7 +2264,7 @@ patch_cluster_sensors() {
 
         # Verify same PVE version before copying Nodes.pm
         local remote_version
-        remote_version=$(ssh -o ConnectTimeout=5 "root@${node}" "dpkg -l pve-manager 2>/dev/null | awk '/^ii/{print \$3}'" 2>/dev/null)
+        remote_version=$(ssh -n -o ConnectTimeout=5 "root@${node}" "dpkg -l pve-manager 2>/dev/null | awk '/^ii/{print \$3}'" 2>/dev/null)
 
         if [[ -n "$local_version" && -n "$remote_version" && "$local_version" != "$remote_version" ]]; then
             print_warning "Version mismatch on ${node} (local: ${local_version}, remote: ${remote_version}) — skipping"
@@ -1547,18 +2272,26 @@ patch_cluster_sensors() {
             continue
         fi
 
+        if ! backup_remote_sensor_state "$node"; then
+            print_error "Could not back up remote sensor state on ${node}; refusing to modify it"
+            return 1
+        fi
+
         if scp -o ConnectTimeout=5 -q "$NODES_PM" "root@${node}:${NODES_PM}" 2>/dev/null; then
             # Sync sensor filter file if it exists
             if [[ -f "$SENSORS_FILTER" ]]; then
-                scp -o ConnectTimeout=5 -q "$SENSORS_FILTER" "root@${node}:${SENSORS_FILTER}" 2>/dev/null || true
+                ssh -n -o ConnectTimeout=5 "root@${node}" "mkdir -p '$(dirname "$SENSORS_FILTER")'" 2>/dev/null || return 1
+                scp -o ConnectTimeout=5 -q "$SENSORS_FILTER" "root@${node}:${SENSORS_FILTER}" 2>/dev/null || return 1
             fi
-            if ssh -o ConnectTimeout=5 "root@${node}" "systemctl restart pveproxy" 2>/dev/null; then
+            if ssh -n -o ConnectTimeout=5 "root@${node}" "systemctl restart pveproxy" 2>/dev/null; then
                 print_status "Sensors deployed to ${node}"
             else
-                print_warning "Patched ${node} but failed to restart pveproxy"
+                print_error "Patched ${node} but failed to restart pveproxy; rolling back"
+                return 1
             fi
         else
-            print_warning "Failed to deploy to ${node} — run install.sh on that node directly"
+            print_error "Failed to deploy to ${node}; rolling back"
+            return 1
         fi
     done
 }
@@ -1574,11 +2307,18 @@ unpatch_cluster_sensors() {
 
     for node in $remote_nodes; do
         print_info "Removing sensor patch from ${node}..."
-        if ssh -o ConnectTimeout=5 "root@${node}" \
+        if [[ "$TRANSACTION_ACTIVE" == "true" ]]; then
+            if ! backup_remote_sensor_state "$node"; then
+                print_error "Could not back up remote sensor state on ${node}; refusing to modify it"
+                return 1
+            fi
+        fi
+        if ssh -n -o ConnectTimeout=5 "root@${node}" \
             "sed -i '/# ProxMorph Sensors/,/# ProxMorph Sensors END/d' /usr/share/perl5/PVE/API2/Nodes.pm 2>/dev/null && systemctl restart pveproxy" 2>/dev/null; then
             print_status "Sensors removed from ${node}"
         else
-            print_warning "Failed to unpatch ${node}"
+            print_error "Failed to unpatch ${node}; rolling back"
+            return 1
         fi
     done
 }
@@ -1596,7 +2336,7 @@ install_sensors() {
     read -p "Enable hardware sensor monitoring in the dashboard? [y/N]: " sensor_choice
     case "$sensor_choice" in
         [Yy]|[Yy][Ee][Ss])
-            patch_nodes_pm || return 1
+            patch_nodes_pm
             mkdir -p "$INSTALL_DIR"
             echo "enabled" > "$SENSORS_CONFIG"
             print_status "Hardware sensor monitoring enabled!"
@@ -1643,27 +2383,46 @@ check_sensors() {
 # Manage sensors subcommand
 manage_sensors() {
     local action="${1:-status}"
+    local owns_transaction=false
 
     case "$action" in
         enable)
             if [[ "$PRODUCT" != "PVE" ]]; then
                 print_error "Sensor support is only available for Proxmox VE"
-                exit 1
+                return 1
             fi
-            detect_sensors || exit 1
-            patch_nodes_pm || exit 1
+            detect_sensors || return 1
+            if [[ "$TRANSACTION_ACTIVE" != "true" ]]; then
+                begin_transaction "sensors-enable"
+                owns_transaction=true
+            fi
+            patch_nodes_pm
             mkdir -p "$INSTALL_DIR"
             echo "enabled" > "$SENSORS_CONFIG"
             print_status "Hardware sensor monitoring enabled!"
             print_info "Restarting ${PROXY_SERVICE}..."
             nohup systemctl restart "${PROXY_SERVICE}" &>/dev/null &
             patch_cluster_sensors
+            if [[ "$owns_transaction" == "true" ]]; then
+                commit_transaction
+            fi
             ;;
         disable)
+            if [[ "$PRODUCT" != "PVE" ]]; then
+                print_error "Sensor support is only available for Proxmox VE"
+                return 1
+            fi
+            if [[ "$TRANSACTION_ACTIVE" != "true" ]]; then
+                begin_transaction "sensors-disable"
+                owns_transaction=true
+            fi
             remove_sensors
             print_status "Hardware sensor monitoring disabled"
             print_info "Restarting ${PROXY_SERVICE}..."
             nohup systemctl restart "${PROXY_SERVICE}" &>/dev/null &
+            if [[ "$owns_transaction" == "true" ]]; then
+                commit_transaction
+            fi
             ;;
         detect)
             detect_sensors
@@ -1671,11 +2430,15 @@ manage_sensors() {
         configure)
             if [[ "$PRODUCT" != "PVE" ]]; then
                 print_error "Sensor support is only available for Proxmox VE"
-                exit 1
+                return 1
             fi
             if ! check_sensors; then
                 print_error "Sensors are not enabled. Enable them first with: install.sh manage-sensors enable"
-                exit 1
+                return 1
+            fi
+            if [[ "$TRANSACTION_ACTIVE" != "true" ]]; then
+                begin_transaction "sensors-configure"
+                owns_transaction=true
             fi
             configure_sensor_filter
             # Re-patch Nodes.pm so the filter file path is current
@@ -1684,6 +2447,9 @@ manage_sensors() {
             print_info "Restarting ${PROXY_SERVICE}..."
             systemctl restart "${PROXY_SERVICE}"
             print_status "Sensor filter applied!"
+            if [[ "$owns_transaction" == "true" ]]; then
+                commit_transaction
+            fi
             ;;
         status|*)
             if check_sensors; then
@@ -1765,20 +2531,37 @@ get_themes_source() {
     return 1
 }
 
+sync_installer_to_cache() {
+    local installer_source="${BASH_SOURCE[0]:-}"
+    mkdir -p "$INSTALL_DIR"
+    if [[ -n "$installer_source" && -f "$installer_source" && "$RELEASE_DOWNLOADED" != "true" && \
+          "$(cd "$(dirname "$installer_source")" 2>/dev/null && pwd)/$(basename "$installer_source")" != "${INSTALL_DIR}/install.sh" ]]; then
+        cp "$installer_source" "${INSTALL_DIR}/install.sh"
+    fi
+    [[ -f "${INSTALL_DIR}/install.sh" ]] && chmod 755 "${INSTALL_DIR}/install.sh"
+}
+
 # Install all themes from themes directory
 install_themes() {
     print_info "Installing ProxMorph themes..."
-    
+
+    # Validate package-owned patch points before the first write.
+    validate_runtime_contracts
+
     local themes_source=$(get_themes_source)
     
     if [[ -z "$themes_source" ]]; then
+        # Downloading replaces /opt/proxmorph, so it is part of the transaction.
+        if [[ "$TRANSACTION_ACTIVE" != "true" ]]; then
+            begin_transaction "install-download"
+        fi
         print_info "Local themes not found, attempting to download latest release..."
         download_release
         themes_source=$(get_themes_source)
         
         if [[ -z "$themes_source" ]]; then
             print_error "Failed to locate themes even after download"
-            exit 1
+            return 1
         fi
     fi
     
@@ -1786,17 +2569,18 @@ install_themes() {
     local theme_count=$(find "$themes_source" -name "theme-*.css" 2>/dev/null | wc -l)
     if [[ $theme_count -eq 0 ]]; then
         print_error "No theme files found in $themes_source (looking for theme-*.css)"
-        exit 1
+        return 1
     fi
     
     print_info "Found $theme_count theme(s)"
 
-    # Fail before backups, copies, or package-file edits when an update has
-    # changed one of the source contracts ProxMorph relies on.
-    validate_runtime_contracts
-    
-    # Backup original files
-    backup_files
+    if [[ "$TRANSACTION_ACTIVE" != "true" ]]; then
+        begin_transaction "install" "$themes_source"
+    fi
+    # If the transaction began before a release download, add every destination
+    # introduced by that release while those destinations are still untouched.
+    extend_backup_inventory "$TRANSACTION_BACKUP_ID" "$themes_source"
+    extend_uninstall_baseline "$themes_source"
     
     # PDM uses a completely different installation approach (CSS injection via index.hbs)
     if [[ "$PRODUCT" == "PDM" ]]; then
@@ -1804,11 +2588,17 @@ install_themes() {
         if [[ "$themes_source" != "${INSTALL_DIR}/themes/pdm" ]]; then
             mkdir -p "${INSTALL_DIR}/themes/pdm"
             cp "$themes_source"/theme-*.css "${INSTALL_DIR}/themes/pdm/" 2>/dev/null || true
+            [[ -f "${themes_source}/proxmorph-pdm-base.css" ]] && cp "${themes_source}/proxmorph-pdm-base.css" "${INSTALL_DIR}/themes/pdm/"
+            mkdir -p "${INSTALL_DIR}/themes/patches"
+            [[ -f "$(dirname "$themes_source")/patches/pdm-theme-selector.js" ]] && \
+                cp "$(dirname "$themes_source")/patches/pdm-theme-selector.js" "${INSTALL_DIR}/themes/patches/"
         fi
+        sync_installer_to_cache
+        : > "$INSTALLED_PATHS_FILE"
         
         install_pdm_themes "$themes_source"
         install_apt_hook
-        echo "$VERSION" > "${INSTALL_DIR}/.version"
+        echo "$TARGET_VERSION" > "${INSTALL_DIR}/.version"
         
         echo ""
         print_status "ProxMorph PDM themes installed successfully!"
@@ -1832,6 +2622,7 @@ install_themes() {
         # Restart service
         print_info "Restarting ${PROXY_SERVICE} service in background..."
         nohup systemctl restart "${PROXY_SERVICE}" &>/dev/null &
+        commit_transaction
         return 0
     fi
     
@@ -1839,6 +2630,8 @@ install_themes() {
     # Create themes directory if not exists
     mkdir -p "$THEMES_DIR"
     mkdir -p "${INSTALL_DIR}/themes"
+    sync_installer_to_cache
+    : > "$INSTALLED_PATHS_FILE"
     
     # Process each theme
     for css_file in "$themes_source"/theme-*.css; do
@@ -1849,6 +2642,7 @@ install_themes() {
             # Copy CSS file to live Proxmox web directory
             cp "$css_file" "${THEMES_DIR}/"
             chmod 644 "${THEMES_DIR}/$(basename "$css_file")"
+            record_installed_path "${THEMES_DIR}/$(basename "$css_file")"
             
             # Sync to local cache so apt hook uses the newest files on update
             if [[ "$themes_source" != "${INSTALL_DIR}/themes" && "$themes_source" != "${INSTALL_DIR}/themes/pdm" ]]; then
@@ -1885,7 +2679,7 @@ install_themes() {
     inject_default_theme
 
     # Write version file
-    echo "$VERSION" > "${INSTALL_DIR}/.version"
+    echo "$TARGET_VERSION" > "${INSTALL_DIR}/.version"
     
     # Offer hardware sensor integration (PVE only)
     if [[ "$PRODUCT" == "PVE" ]]; then
@@ -1904,6 +2698,7 @@ install_themes() {
     # Restart proxy service in background
     print_info "Restarting ${PROXY_SERVICE} service in background..."
     nohup systemctl restart "${PROXY_SERVICE}" &>/dev/null &
+    commit_transaction
 }
 
 # Install a specific theme
@@ -1912,10 +2707,12 @@ install_single_theme() {
     
     if [[ ! -f "$theme_file" ]]; then
         print_error "Theme file not found: $theme_file"
-        exit 1
+        return 1
     fi
     
-    backup_files
+    validate_runtime_contracts
+    begin_transaction "single-theme" "$(dirname "$theme_file")"
+    extend_uninstall_baseline "$(dirname "$theme_file")"
     mkdir -p "$THEMES_DIR"
     
     theme_key=$(get_theme_key "$theme_file")
@@ -1923,81 +2720,144 @@ install_single_theme() {
     
     cp "$theme_file" "${THEMES_DIR}/"
     chmod 644 "${THEMES_DIR}/$(basename "$theme_file")"
+    record_installed_path "${THEMES_DIR}/$(basename "$theme_file")"
     patch_theme_map "$theme_key" "$theme_title"
     
     print_status "Theme '${theme_title}' installed!"
     print_info "Restarting ${PROXY_SERVICE} service in background..."
     nohup systemctl restart "${PROXY_SERVICE}" &>/dev/null &
+    commit_transaction
+}
+
+update_themes() {
+    local version="${1:-}"
+    local update_source=""
+    validate_runtime_contracts
+    update_source=$(get_themes_source || true)
+    begin_transaction "update" "$update_source"
+    download_release "$version"
+    install_themes
 }
 
 # Reinstall themes (after PVE update)
 reinstall_themes() {
     print_info "Reinstalling ProxMorph themes..."
+    validate_runtime_contracts
+    local themes_source=$(get_themes_source)
+    begin_transaction "reinstall" "$themes_source"
     restore_packages
     install_themes
 }
 
+remove_installed_assets() {
+    local themes_source="${1:-}"
+    local path=""
+    local css_file=""
+
+    if [[ -f "$INSTALLED_PATHS_FILE" ]]; then
+        while IFS= read -r path; do
+            [[ -n "$path" ]] || continue
+            if backup_path_is_allowed "$path" && path_exists "$path"; then
+                remove_exact_path "$path"
+                print_status "Removed: $path"
+            fi
+        done < "$INSTALLED_PATHS_FILE"
+    elif [[ "$PRODUCT" == "PDM" ]]; then
+        if path_exists "$PDM_THEMES_DIR"; then remove_exact_path "$PDM_THEMES_DIR"; fi
+        if path_exists "$PDM_JS_PATCHES_DIR"; then remove_exact_path "$PDM_JS_PATCHES_DIR"; fi
+    else
+        for css_file in "$themes_source"/theme-*.css; do
+            [[ -f "$css_file" ]] || continue
+            path="${THEMES_DIR}/$(basename "$css_file")"
+            if path_exists "$path"; then remove_exact_path "$path"; fi
+        done
+        if path_exists "$JS_PATCHES_DIR"; then remove_exact_path "$JS_PATCHES_DIR"; fi
+    fi
+}
+
 # Uninstall all themes
 uninstall_themes() {
-    print_info "Uninstalling ProxMorph themes..."
-    
-    # PDM-specific uninstall
-    if [[ "$PRODUCT" == "PDM" ]]; then
-        remove_pdm_themes
-        remove_apt_hook
-        rm -f "$DEFAULT_THEME_FILE"
-        if [[ -d "$INSTALL_DIR" ]]; then
-            rm -rf "$INSTALL_DIR"
-            print_status "Removed install directory: $INSTALL_DIR"
-        fi
-        echo ""
-        print_status "ProxMorph PDM themes uninstalled!"
-        print_info "Clear your browser cache and localStorage to see the changes."
-        print_info "Restarting ${PROXY_SERVICE}..."
-        nohup systemctl restart "${PROXY_SERVICE}" &>/dev/null &
-        return 0
-    fi
-    
-    # PVE/PBS uninstall
-    # Find themes source
-    local themes_source=$(get_themes_source) || THEMES_DIR
-    
-    # Remove CSS files
-    for css_file in "$themes_source"/theme-*.css; do
-        if [[ -f "$css_file" ]]; then
-            target_file="${THEMES_DIR}/$(basename "$css_file")"
-            if [[ -f "$target_file" ]]; then
-                rm "$target_file"
-                print_status "Removed: $(basename "$css_file")"
-            fi
-        fi
+    local assume_yes=false
+    local arg=""
+    local themes_source=""
+    local baseline_id=""
+    local baseline_dir=""
+    local baseline_verified=false
+    local clean_package_backup_id=""
+    local clean_package_backup_dir=""
+    local used_baseline=false
+
+    for arg in "$@"; do
+        case "$arg" in
+            --yes) assume_yes=true ;;
+            *) print_error "Unknown uninstall option: $arg"; return 1 ;;
+        esac
     done
-    
-    # Remove JavaScript patches
-    remove_js_patches
 
-    # Remove server-side default theme
-    remove_default_theme_injection
-    rm -f "$DEFAULT_THEME_FILE"
+    confirm_destructive_action "Fully uninstall ProxMorph and restore the pre-install state?" "$assume_yes" || return 1
+    print_info "Uninstalling ProxMorph themes..."
+    themes_source=$(get_themes_source || true)
+    begin_transaction "uninstall" "$themes_source"
 
-    # Remove sensor patches
-    remove_sensors
-    
-    # Remove apt hook
-    remove_apt_hook
-    
-    # Restore original proxmoxlib.js
-    restore_packages
-    
-    # Clean up install directory
-    if [[ -d "$INSTALL_DIR" ]]; then
-        rm -rf "$INSTALL_DIR"
-        print_status "Removed install directory: $INSTALL_DIR"
+    # Remove assets introduced by releases newer than the baseline before an
+    # exact restore; an older baseline cannot enumerate future filenames.
+    remove_installed_assets "$themes_source"
+
+    if baseline_id=$(resolve_backup_id baseline 2>/dev/null); then
+        baseline_dir="$(product_backup_dir)/${baseline_id}"
+        if verify_backup "$baseline_dir"; then
+            baseline_verified=true
+        fi
+        if [[ "$baseline_verified" != "true" ]]; then
+            print_warning "The clean baseline failed verification; using current packages for uninstall"
+        elif verify_backup_package_versions "$baseline_dir"; then
+            restore_backup_internal "$baseline_id" true false
+            used_baseline=true
+        else
+            print_warning "The clean baseline belongs to a different package version; using current packages for uninstall"
+        fi
     fi
-    
+
+    if [[ "$used_baseline" != "true" ]]; then
+        # No trustworthy same-version baseline (for example, an upgrade from a
+        # pre-v2.10 install). Remove only ProxMorph-owned state, then reinstall
+        # the currently selected package versions rather than restoring stale
+        # package files.
+        if [[ "$PRODUCT" == "PDM" ]]; then
+            remove_pdm_themes
+        else
+            remove_js_patches
+            remove_default_theme_injection
+            [[ "$PRODUCT" == "PVE" ]] && remove_sensors
+        fi
+        remove_apt_hook
+        if path_exists "$CONFIG_DIR"; then remove_exact_path "$CONFIG_DIR"; fi
+        if path_exists "$PROXMORPH_LOG_FILE"; then remove_exact_path "$PROXMORPH_LOG_FILE"; fi
+        if path_exists "$INSTALL_DIR"; then remove_exact_path "$INSTALL_DIR"; fi
+        clean_package_backup_id=$(find_current_clean_package_backup || true)
+        if [[ -n "$clean_package_backup_id" ]]; then
+            clean_package_backup_dir="$(product_backup_dir)/${clean_package_backup_id}"
+            restore_local_inventory "$clean_package_backup_dir" package
+            print_status "Restored current clean package files from backup ${clean_package_backup_id}"
+        else
+            restore_all_product_packages
+        fi
+        if [[ "$baseline_verified" == "true" ]]; then
+            restore_local_inventory "$baseline_dir" nonpackage
+            print_status "Restored pre-existing non-package files from the uninstall baseline"
+        fi
+    fi
+
+    commit_transaction
     echo ""
-    print_status "ProxMorph themes uninstalled!"
-    print_info "Clear your browser cache to see the changes."
+    print_status "ProxMorph fully uninstalled; rollback backups were retained in $(product_backup_dir)"
+    if [[ "$PRODUCT" == "PDM" ]]; then
+        print_info "Clear your browser cache and the ProxMorph PDM browser theme selection to see the changes."
+    else
+        print_info "Clear your browser cache to see the changes."
+    fi
+    print_info "Restarting ${PROXY_SERVICE}..."
+    nohup systemctl restart "${PROXY_SERVICE}" &>/dev/null &
 }
 
 # List available themes
@@ -2075,8 +2935,9 @@ show_status() {
     echo -e "  Installed:  ${GREEN}${installed}${NC} theme(s)"
     
     # Backup status
-    if [[ -f "${BACKUP_DIR}/proxmoxlib.js.original" ]]; then
-        echo -e "  Backup:     ${GREEN}Available${NC}"
+    local backup_product_dir=$(product_backup_dir)
+    if [[ -f "${backup_product_dir}/latest" ]]; then
+        echo -e "  Backup:     ${GREEN}Available${NC} ($(tr -d ' \t\r\n' < "${backup_product_dir}/latest"))"
     else
         echo -e "  Backup:     ${YELLOW}Not created${NC}"
     fi
@@ -2118,13 +2979,16 @@ show_menu() {
     [[ "$PRODUCT" == "PVE" ]] && echo "  7) Manage sensors"
     echo "  8) Set default theme (server-side)"
     echo "  9) Verify Proxmox compatibility"
+    echo " 10) Create full backup"
+    echo " 11) List backups"
+    echo " 12) Restore a backup"
     echo "  0) Exit"
     echo ""
-    read -p "Enter choice [0-9]: " choice
+    read -p "Enter choice [0-12]: " choice
 
     case $choice in
         1) install_themes ;;
-        2) download_release && install_themes ;;
+        2) update_themes ;;
         3) reinstall_themes ;;
         4) uninstall_themes ;;
         5) list_themes ;;
@@ -2137,6 +3001,14 @@ show_menu() {
             [[ -n "$dt_key" ]] && manage_default_theme "$dt_key"
             ;;
         9) validate_runtime_contracts ;;
+        10) create_backup "manual" "$(get_themes_source || true)" ;;
+        11) list_backups ;;
+        12)
+            list_backups
+            echo ""
+            read -r -p "Enter backup ID (latest or baseline are also accepted): " restore_id
+            [[ -n "$restore_id" ]] && restore_backup "$restore_id"
+            ;;
         0) exit 0 ;;
         *) print_error "Invalid option" ; show_menu ;;
     esac
@@ -2154,20 +3026,39 @@ main() {
 
     check_root
     check_product
+
+    case "${1:-}" in
+        list|status|check|backups|list-backups) ;;
+        sensors)
+            [[ "${2:-status}" == "status" || "${2:-status}" == "detect" ]] || acquire_operation_lock
+            ;;
+        default-theme)
+            [[ -z "${2:-}" ]] || acquire_operation_lock
+            ;;
+        *) acquire_operation_lock ;;
+    esac
     
     case "${1:-}" in
         install)
             install_themes
             ;;
         update)
-            download_release "${2:-}"
-            install_themes
+            update_themes "${2:-}"
             ;;
         reinstall)
             reinstall_themes
             ;;
         uninstall)
-            uninstall_themes
+            uninstall_themes "${@:2}"
+            ;;
+        backup)
+            create_backup "${2:-manual}" "$(get_themes_source || true)"
+            ;;
+        backups|list-backups)
+            list_backups
+            ;;
+        restore)
+            restore_backup "${2:-latest}" "${@:3}"
             ;;
         list)
             list_themes

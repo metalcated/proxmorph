@@ -10,12 +10,16 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - **Proxmox VE 9.2.6+ compatibility preflight**: validates the package version and every patched runtime contract (`proxmoxlib.js` theme map, index loader/insertion point, and `Nodes.pm` sensor anchor) before modifying Proxmox-owned files. Future versions with unchanged contracts remain supported; changed layouts fail closed.
 - **Inventory View for PVE**: adds an optional node → resource pool → guest hierarchy to the native view selector, plus a modal for showing or hiding VMs, containers, templates, storage, SDN/network resources, stopped guests, and pool grouping. Includes expand/collapse actions and uses no new browser-local persistence.
+- **Full transactional backup and restore**: creates timestamped, checksummed, per-product snapshots before every mutating operation; restores failed/interrupted operations automatically; adds `backup`, `list-backups`, and version-guarded `restore` commands; and preserves remote cluster sensor files before deployment.
+- **Baseline-driven full uninstall**: restores the clean pre-install snapshot when package versions match, retains an uninstall rollback snapshot, and safely reinstalls the current web packages when a same-version baseline is unavailable.
 
 ### Changed
-- Bumped the installer version to 2.9.0.
+- Bumped the installer version to 2.10.0.
+- The APT update hook now snapshots newly installed package files before re-patching and restores them automatically if re-patching fails.
 
 ### Fixed
 - **PDM Catppuccin Frappé and Macchiato**: restored the missing dark-mode semantic selector so their surface variables are valid CSS and apply on Proxmox Datacenter Manager.
+- **Stale PDM restore protection**: `reinstall` no longer copies the original first-install `index.hbs` over a newer PDM package; it restores the currently installed UI package before reapplying themes.
 
 ## [2.8.1] - 2026-07-19
 

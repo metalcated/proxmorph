@@ -136,11 +136,16 @@ Checksum verification still runs, against your mirrored `SHA256SUMS`.
 | Command | Description |
 |---------|-------------|
 | `./install.sh install` | Install themes |
-| `./install.sh uninstall` | Remove themes |
+| `./install.sh uninstall` | Fully uninstall and restore the clean pre-install state (asks for confirmation) |
+| `./install.sh uninstall --yes` | Non-interactive full uninstall |
 | `./install.sh update` or `bash <(curl -fsSL https://raw.githubusercontent.com/IT-BAER/proxmorph/main/install.sh) update` | Updates (latest from GitHub) and install the latest themes |
 | `./install.sh status` | Show installation status |
 | `./install.sh default-theme <key\|none>` | Set a server-side default theme for new browsers (user choice always wins) |
 | `./install.sh compatibility` | Verify the installed Proxmox version and every source-level patch point before installation |
+| `./install.sh backup [label]` | Create a full, checksummed backup of every ProxMorph-managed path |
+| `./install.sh list-backups` | List backups and identify the clean uninstall baseline |
+| `./install.sh restore <id\|latest\|baseline>` | Restore a backup after confirmation |
+| `./install.sh restore <id> --yes` | Non-interactive restore; add `--force` only for a reviewed package-version mismatch |
 | `./install.sh` | Shows Menu to manage|
 
 ## 🗂️ Inventory View (PVE)
@@ -166,10 +171,24 @@ Run as root, `install.sh` makes only these changes, all reversible with `./insta
 - **Theme registration:** `sed`-patches the `theme_map` in `proxmoxlib.js` so the themes appear in the native Color Theme selector.
 - **Index template:** injects `<script>` / `<link>` tags into the product index template for the JS patches and (PDM) theme links.
 - **Compatibility preflight:** validates the installed package version, template insertion points, theme map, PVE UI loader, and sensor anchor before modifying package-owned files.
-- **Persistence:** installs an APT hook at `/etc/apt/apt.conf.d/99proxmorph` that runs `/opt/proxmorph/post-update.sh` to re-apply the patches after a Proxmox update. The hook re-patches from the local `/opt/proxmorph` copy only; it downloads nothing.
+- **Persistence:** installs an APT hook at `/etc/apt/apt.conf.d/99proxmorph` that runs `/opt/proxmorph/post-update.sh` to back up the new package files and re-apply the patches after a Proxmox update. The hook re-patches from the local `/opt/proxmorph` copy only; it downloads nothing.
 - **Sensors (PVE, optional):** if you enable sensor display, edits `Nodes.pm` to expose `lm-sensors` data.
 
-Originals are backed up to `/root/.proxmorph-backup` before any file is modified. `./install.sh uninstall` restores them and removes the hook.
+### Full backup, rollback, and uninstall
+
+Before every install, update, reinstall, restore, uninstall, default-theme change, or sensor change, ProxMorph creates a versioned backup under `/root/.proxmorph-backups/<product>/`. The first clean snapshot becomes the uninstall baseline. Backups include:
+
+- Every package-owned file ProxMorph edits: `proxmoxlib.js`, the product index template, and (PVE sensors) `Nodes.pm`.
+- Every destination theme file that may be overwritten, including whether it was originally absent.
+- ProxMorph JavaScript/theme directories, `/opt/proxmorph`, `/etc/proxmorph`, the APT hook, and the ProxMorph log.
+- Original remote `Nodes.pm` and sensor-filter state before optional cluster sensor deployment.
+- Product package versions, file state, preserved ownership/modes, and SHA-256 checksums.
+
+If a mutating operation fails or is interrupted, the just-created snapshot is restored automatically. Manual restore also creates a pre-restore snapshot first. A normal restore refuses to overwrite package-owned files when the installed Proxmox package versions differ from the backup; `--force` is available for an explicitly reviewed exception.
+
+`uninstall` asks for confirmation, backs up the installed state, then restores the clean same-version baseline. If the baseline belongs to an older Proxmox package version, the installer uses the newest verified `apt-repatch` snapshot of the current clean package files when available; otherwise it reinstalls the currently selected Proxmox web packages. Pre-existing non-package files still come from the baseline, and stale package files are never restored implicitly. Backups are retained and never pruned automatically.
+
+This is a full backup of the installer's system footprint, not a backup of VMs, containers, storage, or `/etc/pve`, which ProxMorph does not modify.
 
 ## 🛠️ Creating Themes
 
@@ -188,7 +207,7 @@ Theme files must start with `/*!Display Name*/` - this sets the name in Proxmox'
 If themes don't appear after installation:
 
 1. **Clear browser cache** — Press Ctrl+Shift+R (hard refresh)
-2. **Run verify check** — Run `./install.sh` and select option 7 (Verify installation)
+2. **Run compatibility check** — Run `./install.sh compatibility`
 3. **Check installation status** — Run `./install.sh status`
 4. **Restart proxy service** — Run `systemctl restart pveproxy` (PVE), `systemctl restart proxmox-backup-proxy` (PBS), or `systemctl restart proxmox-datacenter-api` (PDM)
 
