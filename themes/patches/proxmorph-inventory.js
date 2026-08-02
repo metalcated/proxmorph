@@ -13,7 +13,7 @@
  * protected API and the replicated Proxmox cluster filesystem. The selected
  * view itself continues to use Proxmox's native URL state.
  *
- * Version: 1.8.0
+ * Version: 1.8.1
  */
 (function () {
     'use strict';
@@ -24,7 +24,7 @@
     var CONNECTIVITY_VIEW_KEY = 'proxmorph-connectivity';
     var VNET_TYPE = 'proxmorph-vnet';
     var VNETS_URL = '/cluster/sdn/vnets';
-    var VERSION = '1.8.0';
+    var VERSION = '1.8.1';
     var PREFERENCES_URL = '/proxmorph/preferences';
     var MAX_INIT_ATTEMPTS = 40;
     var initAttempts = 0;
@@ -1084,7 +1084,7 @@
                         {
                             xtype: 'checkboxfield',
                             name: 'noVncContextMenu',
-                            boxLabel: 'Enable Shift + right-click clipboard menu',
+                            boxLabel: 'Enable Option/Alt + right-click clipboard menu',
                             inputValue: true,
                             uncheckedValue: false,
                             checked: settings.noVncContextMenu,
@@ -1093,7 +1093,7 @@
                         {
                             xtype: 'component',
                             cls: 'pmx-inventory-help',
-                            html: 'Keeps normal right-click available inside the guest while adding fast clipboard actions to noVNC.',
+                            html: 'Uses Option on macOS or Alt elsewhere. Normal right-click remains available inside the guest.',
                         },
                         {
                             xtype: 'checkboxfield',

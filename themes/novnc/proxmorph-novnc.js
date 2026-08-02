@@ -4,12 +4,12 @@
  * Enhances Proxmox's supported noVNC clipboard transport without replacing it.
  * Clipboard text remains in memory only and is cleared when the console closes.
  *
- * Version: 1.0.0
+ * Version: 1.0.1
  */
 (function () {
     'use strict';
 
-    var VERSION = '1.0.0';
+    var VERSION = '1.0.1';
     var PREFERENCES_URL = '/api2/extjs/proxmorph/preferences';
     var COPY_TIMEOUT_MS = 1800;
     var defaults = {
@@ -140,6 +140,10 @@
         }
         var key = String(event.key || '').toLowerCase();
         return key === 'c' || key === 'v' ? key : '';
+    }
+
+    function contextMenuGesture(event) {
+        return Boolean(event && event.altKey && event.button === 2);
     }
 
     function setStatus(message, state) {
@@ -366,7 +370,7 @@
 
         var hint = document.createElement('p');
         hint.className = 'pmx-novnc-hint';
-        hint.textContent = 'Shift + right-click the console for clipboard actions. Normal right-click still goes to the guest.';
+        hint.textContent = 'Option/Alt + right-click the console for clipboard actions. Normal right-click still goes to the guest.';
 
         enhancement.appendChild(actions);
         enhancement.appendChild(panelStatus);
@@ -425,13 +429,26 @@
         }
     }
 
-    function handleConsoleContextMenu(event) {
-        if (!settings.noVncContextMenu || !event.shiftKey) {
+    function handleConsoleContextGesture(event) {
+        if (
+            !settings.noVncContextMenu ||
+            !contextMenuGesture(event) ||
+            !container ||
+            !container.contains(event.target)
+        ) {
             return;
         }
         event.preventDefault();
         event.stopImmediatePropagation();
-        showContextMenu(event.clientX, event.clientY);
+
+        if (
+            event.type === 'pointerdown' ||
+            (event.type === 'mousedown' && typeof window.PointerEvent === 'undefined') ||
+            (event.type === 'contextmenu' &&
+                (!contextMenu || !contextMenu.classList.contains('pmx-novnc-context-menu-open')))
+        ) {
+            showContextMenu(event.clientX, event.clientY);
+        }
     }
 
     function handleShortcut(event) {
@@ -511,7 +528,11 @@
         createContextMenu();
         loadPreferences();
 
-        canvas.addEventListener('contextmenu', handleConsoleContextMenu, true);
+        ['pointerdown', 'pointerup', 'mousedown', 'mouseup', 'contextmenu', 'auxclick'].forEach(
+            function (eventName) {
+                window.addEventListener(eventName, handleConsoleContextGesture, true);
+            },
+        );
         container.addEventListener('pointerdown', function () {
             consoleFocused = true;
         });
@@ -544,6 +565,7 @@
         defaults: copySettings(defaults),
         normalizePreferences: normalizePreferences,
         shortcutAction: shortcutAction,
+        contextMenuGesture: contextMenuGesture,
         clearTransientState: clearTransientState,
         stop: function () {
             window.clearInterval(bindTimer);

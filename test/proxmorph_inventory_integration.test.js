@@ -475,7 +475,7 @@ assert.ok(
 );
 assert.ok(
     settingsItems.some((item) => item.name === 'noVncContextMenu'),
-    'settings modal exposes the Shift + right-click clipboard menu option',
+    'settings modal exposes the Option/Alt + right-click clipboard menu option',
 );
 assert.ok(
     settingsItems.some((item) => item.name === 'noVncClipboardShortcuts'),

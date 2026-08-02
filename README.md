@@ -205,11 +205,11 @@ The hierarchy itself comes from the resource pools already configured in Proxmox
 
 ### noVNC clipboard (PVE)
 
-ProxMorph enhances Proxmox's existing noVNC clipboard transport; it does not emulate text by typing individual keys. When a VM's Display hardware has **Clipboard: VNC** enabled, the native clipboard icon gains **Paste into guest**, **Copy from guest**, and **Clear** actions. **Shift + right-click** anywhere in the console opens the same theme-native action menu while normal right-click continues to reach the guest.
+ProxMorph enhances Proxmox's existing noVNC clipboard transport; it does not emulate text by typing individual keys. When a VM's Display hardware has **Clipboard: VNC** enabled, the native clipboard icon gains **Paste into guest**, **Copy from guest**, and **Clear** actions. **Option + right-click** on macOS (**Alt + right-click** elsewhere) anywhere in the console opens the same theme-native action menu while normal right-click continues to reach the guest. ProxMorph intercepts the complete modified right-click gesture before noVNC, so the guest does not receive an unintended click.
 
 The Inventory, Appearance & Console modal includes two account-level controls:
 
-- **Enable Shift + right-click clipboard menu** is enabled by default.
+- **Enable Option/Alt + right-click clipboard menu** is enabled by default.
 - **Capture Ctrl+C and Ctrl+V in noVNC** is opt-in. When enabled, ProxMorph forwards the shortcut to the guest and synchronizes the resulting plain text with the browser clipboard.
 
 The VM must use Proxmox's `clipboard=vnc` display option, and its guest OS must run a compatible vdagent (`spice-vdagent` on Linux or the SPICE Guest Tools on Windows). A display change may require a full VM restart before Proxmox exposes the clipboard icon. Clipboard transfer is plain text only. ProxMorph never writes clipboard contents to the preference file, browser storage, logs, or backups, and clears its in-memory copy when the console disconnects. Browser clipboard permission failures fall back to the existing in-console clipboard field instead of a JavaScript prompt.

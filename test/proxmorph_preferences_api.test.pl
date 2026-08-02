@@ -105,7 +105,7 @@ is($root_defaults->{showStorage}, 0, 'guest inventory excludes storage by defaul
 is($root_defaults->{showNetwork}, 0, 'guest inventory excludes connectivity by default');
 is($root_defaults->{uiFont}, 'default', 'the native Proxmox font remains the safe default');
 is($root_defaults->{uiTextSize}, 'default', 'the native 13 px scale remains the safe default');
-is($root_defaults->{noVncContextMenu}, 1, 'the safe Shift + right-click clipboard menu is enabled by default');
+is($root_defaults->{noVncContextMenu}, 1, 'the safe Option/Alt + right-click clipboard menu is enabled by default');
 is($root_defaults->{noVncClipboardShortcuts}, 0, 'direct clipboard shortcut capture remains opt-in');
 is_deeply(
     $put->{parameters}->{properties}->{uiFont}->{enum},

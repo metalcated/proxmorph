@@ -15,7 +15,7 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Configuration
-VERSION="2.19.0"
+VERSION="2.19.1"
 TARGET_VERSION="$VERSION"
 WIDGET_TOOLKIT_DIR="/usr/share/javascript/proxmox-widget-toolkit"
 THEMES_DIR="${WIDGET_TOOLKIT_DIR}/themes"
@@ -1996,7 +1996,7 @@ BLOCK
     rm -f "$temporary_block"
 
     record_installed_path "$NOVNC_PROXMORPH_DIR"
-    print_status "Enabled the native noVNC clipboard toolbar and Shift + right-click menu"
+    print_status "Enabled the native noVNC clipboard toolbar and Option/Alt + right-click menu"
 }
 
 remove_novnc_clipboard() {
