@@ -10,6 +10,7 @@ let settingsWindow;
 let appliedView;
 let navigation;
 let rootText = 'Datacenter';
+const apiRequests = [];
 
 const store = {
     add(record) {
@@ -108,6 +109,32 @@ selector.on('select', (combo) => tree.setViewFilter(combo.getViewFilter()));
 
 global.window = { location: { hostname: 'pve.gnet.com' } };
 global.PVE = {};
+global.Proxmox = {
+    Utils: {
+        API2Request(options) {
+            apiRequests.push(options);
+            if (options.method === 'GET') {
+                options.success({
+                    result: {
+                        data: {
+                            useIconNavigation: false,
+                            groupByNode: true,
+                            showPools: true,
+                            showVirtualMachines: true,
+                            showContainers: true,
+                            showTemplates: true,
+                            showStorage: false,
+                            showNetwork: false,
+                            showStoppedGuests: true,
+                        },
+                    },
+                });
+            } else {
+                options.success({ result: { data: null } });
+            }
+        },
+    },
+};
 global.Ext = {
     ClassManager: { get: () => true },
     ComponentQuery: { query: () => [tree] },
@@ -139,6 +166,9 @@ global.Ext = {
 require(path.join(__dirname, '..', 'themes', 'patches', 'proxmorph-inventory.js'));
 
 assert.equal(global.window.ProxMorphInventory.compatible, true);
+assert.equal(global.window.ProxMorphInventory.preferencesAvailable(), true);
+assert.equal(apiRequests[0].method, 'GET');
+assert.equal(apiRequests[0].url, '/proxmorph/preferences');
 assert.deepEqual(records, [
     { key: 'proxmorph-inventory', value: 'Inventory View' },
     { key: 'proxmorph-storage', value: 'Storage View' },
@@ -172,9 +202,22 @@ assert.ok(
     settingsWindow.config.items[0].config.items.some((item) => item.name === 'groupByNode'),
     'settings modal exposes the hierarchy option',
 );
+assert.ok(
+    settingsWindow.config.items[0].config.items.some(
+        (item) =>
+            item.fieldLabel === 'Preference scope' &&
+            /Authenticated Proxmox user account/.test(item.value),
+    ),
+    'settings modal identifies account-level persistence',
+);
 
 const applyButton = settingsWindow.config.buttons.find((button) => button.text === 'Apply');
 applyButton.handler();
+
+assert.equal(apiRequests[1].method, 'PUT');
+assert.equal(apiRequests[1].url, '/proxmorph/preferences');
+assert.equal(apiRequests[1].params.groupByNode, 0);
+assert.equal(apiRequests[1].params.useIconNavigation, 1);
 
 assert.equal(selector.getValue(), 'proxmorph-inventory');
 assert.equal(selector.hidden, true, 'native picker is hidden when icon navigation is enabled');

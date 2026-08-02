@@ -15,7 +15,7 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Configuration
-VERSION="2.12.0"
+VERSION="2.13.0"
 TARGET_VERSION="$VERSION"
 WIDGET_TOOLKIT_DIR="/usr/share/javascript/proxmox-widget-toolkit"
 THEMES_DIR="${WIDGET_TOOLKIT_DIR}/themes"
@@ -42,6 +42,16 @@ PVE_INDEX_TPL="${PVE_MANAGER_DIR}/index.html.tpl"
 PVE_MANAGER_JS="${PVE_MANAGER_DIR}/js/pvemanagerlib.js"
 PVE_JS_PATCHES_DIR="${PVE_MANAGER_DIR}/js/proxmorph"
 PVE_SERVICE="pveproxy"
+PVE_CLUSTER_PM="/usr/share/perl5/PVE/Cluster.pm"
+PVE_API2_PM="/usr/share/perl5/PVE/API2.pm"
+PVE_PROXMORPH_API_PM="/usr/share/perl5/PVE/API2/ProxMorph.pm"
+PVE_PREFERENCES_FILE="/etc/pve/priv/proxmorph-user-preferences.json"
+PVE_API_SERVICE="pvedaemon"
+PVE_PREFERENCES_SOURCE_RELATIVE="server/PVE/API2/ProxMorph.pm"
+PVE_CLUSTER_PREFS_MARKER="# ProxMorph User Preferences BEGIN"
+PVE_CLUSTER_PREFS_MARKER_END="# ProxMorph User Preferences END"
+PVE_API_PREFS_MARKER="# ProxMorph Preferences API BEGIN"
+PVE_API_PREFS_MARKER_END="# ProxMorph Preferences API END"
 
 # PBS-specific paths
 PBS_MANAGER_DIR="/usr/share/javascript/proxmox-backup"
@@ -84,6 +94,25 @@ print_warning() { echo -e "${YELLOW}[!]${NC} $1"; }
 print_error() { echo -e "${RED}[✗]${NC} $1"; }
 print_info() { echo -e "${BLUE}[i]${NC} $1"; }
 print_theme() { echo -e "${MAGENTA}[T]${NC} $1"; }
+
+restart_proxmorph_services() {
+    local background="${1:-false}"
+    local services=()
+    [[ -n "$PROXY_SERVICE" ]] || return 0
+    [[ "$PRODUCT" == "PVE" ]] && services+=("$PVE_API_SERVICE")
+    services+=("$PROXY_SERVICE")
+
+    if [[ "$background" == "true" ]]; then
+        nohup systemctl restart "${services[@]}" &>/dev/null &
+    else
+        systemctl restart "${services[@]}"
+    fi
+}
+
+preview_service_restarts() {
+    [[ "$PRODUCT" == "PVE" ]] && printf '  [restart] %s\n' "$PVE_API_SERVICE"
+    printf '  [restart] %s\n' "$PROXY_SERVICE"
+}
 
 # Check if running as root
 check_root() {
@@ -256,6 +285,28 @@ validate_runtime_contracts() {
                 errors=$((errors + 1))
             fi
         fi
+        if [[ ! -f "$PVE_CLUSTER_PM" ]]; then
+            print_error "PVE cluster module not found: ${PVE_CLUSTER_PM}"
+            errors=$((errors + 1))
+        else
+            local cluster_preferences_anchor_count
+            cluster_preferences_anchor_count=$(grep -cF 'my $observed = {' "$PVE_CLUSTER_PM" 2>/dev/null || true)
+            if [[ "$cluster_preferences_anchor_count" -ne 1 ]]; then
+                print_error "Expected one cluster preferences anchor in ${PVE_CLUSTER_PM}; found ${cluster_preferences_anchor_count}"
+                errors=$((errors + 1))
+            fi
+        fi
+        if [[ ! -f "$PVE_API2_PM" ]]; then
+            print_error "PVE API root module not found: ${PVE_API2_PM}"
+            errors=$((errors + 1))
+        else
+            local preferences_api_anchor_count
+            preferences_api_anchor_count=$(grep -cF 'use base qw(PVE::RESTHandler);' "$PVE_API2_PM" 2>/dev/null || true)
+            if [[ "$preferences_api_anchor_count" -ne 1 ]]; then
+                print_error "Expected one preferences API anchor in ${PVE_API2_PM}; found ${preferences_api_anchor_count}"
+                errors=$((errors + 1))
+            fi
+        fi
     fi
 
     if [[ "$errors" -ne 0 ]]; then
@@ -417,7 +468,7 @@ proxmorph_install_detected() {
 
 get_product_package_names() {
     case "$PRODUCT" in
-        PVE) printf '%s\n' pve-manager proxmox-widget-toolkit ;;
+        PVE) printf '%s\n' pve-manager pve-cluster proxmox-widget-toolkit ;;
         PBS) printf '%s\n' proxmox-backup-server proxmox-widget-toolkit ;;
         PDM) printf '%s\n' proxmox-datacenter-manager proxmox-datacenter-manager-ui ;;
     esac
@@ -481,7 +532,13 @@ collect_backup_candidates() {
         add_backup_candidate "$PROXMOXLIB_JS"
         add_backup_candidate "$JS_PATCHES_DIR"
     fi
-    [[ "$PRODUCT" == "PVE" ]] && add_backup_candidate "$NODES_PM"
+    if [[ "$PRODUCT" == "PVE" ]]; then
+        add_backup_candidate "$NODES_PM"
+        add_backup_candidate "$PVE_CLUSTER_PM"
+        add_backup_candidate "$PVE_API2_PM"
+        add_backup_candidate "$PVE_PROXMORPH_API_PM"
+        add_backup_candidate "$PVE_PREFERENCES_FILE"
+    fi
 
     # Preserve every live theme file that the current or incoming release owns,
     # without copying the package's entire stock theme directory.
@@ -515,6 +572,9 @@ backup_path_is_allowed() {
         "$PROXMOXLIB_JS") [[ "$PRODUCT" == "PVE" || "$PRODUCT" == "PBS" ]] && return 0 ;;
         "$JS_PATCHES_DIR") return 0 ;;
         "$NODES_PM") [[ "$PRODUCT" == "PVE" ]] && return 0 ;;
+        "$PVE_CLUSTER_PM"|"$PVE_API2_PM"|"$PVE_PROXMORPH_API_PM"|"$PVE_PREFERENCES_FILE")
+            [[ "$PRODUCT" == "PVE" ]] && return 0
+            ;;
         "$PDM_THEMES_DIR"|"$PDM_JS_PATCHES_DIR") [[ "$PRODUCT" == "PDM" ]] && return 0 ;;
         "$THEMES_DIR"/theme-*.css)
             [[ "$(dirname "$path")" == "$THEMES_DIR" ]] && return 0
@@ -732,7 +792,7 @@ restore_local_inventory() {
         }
         if [[ "$scope" == "nonpackage" ]]; then
             case "$path" in
-                "$INDEX_TEMPLATE"|"$PROXMOXLIB_JS"|"$NODES_PM") continue ;;
+                "$INDEX_TEMPLATE"|"$PROXMOXLIB_JS"|"$NODES_PM"|"$PVE_CLUSTER_PM"|"$PVE_API2_PM") continue ;;
             esac
             # On a cross-version uninstall, the currently installed package
             # wins if it has since claimed a formerly custom destination.
@@ -741,7 +801,7 @@ restore_local_inventory() {
             fi
         elif [[ "$scope" == "package" ]]; then
             case "$path" in
-                "$INDEX_TEMPLATE"|"$PROXMOXLIB_JS"|"$NODES_PM") ;;
+                "$INDEX_TEMPLATE"|"$PROXMOXLIB_JS"|"$NODES_PM"|"$PVE_CLUSTER_PM"|"$PVE_API2_PM") ;;
                 *) continue ;;
             esac
         fi
@@ -756,7 +816,14 @@ restore_local_inventory() {
                     remove_exact_path "$path" || return 1
                 fi
                 mkdir -p "$(dirname "$path")" || return 1
-                cp -a "$source_path" "$path" || return 1
+                if [[ "$path" == "$PVE_PREFERENCES_FILE" ]]; then
+                    # pmxcfs derives ownership and modes from the path and does
+                    # not implement chmod/chown, so restore its contents without
+                    # cp -a metadata operations.
+                    cp "$source_path" "$path" || return 1
+                else
+                    cp -a "$source_path" "$path" || return 1
+                fi
                 ;;
             absent)
                 if path_exists "$path"; then
@@ -804,7 +871,7 @@ restore_remote_inventory() {
             print_error "Invalid remote backup inventory state '${state}'"
             return 1
         fi
-        ssh -n -o ConnectTimeout=5 "root@${node}" "systemctl restart pveproxy" >/dev/null || return 1
+        ssh -n -o ConnectTimeout=5 "root@${node}" "systemctl restart pvedaemon pveproxy" >/dev/null || return 1
         print_status "Restored remote sensor state on ${node}"
     done < "${backup_dir}/remote-inventory.tsv"
 }
@@ -856,7 +923,7 @@ restore_backup_internal() {
     restore_local_inventory "$backup_dir" || return 1
     restore_remote_inventory "$backup_dir" || return 1
     if command -v systemctl &>/dev/null && [[ -n "$PROXY_SERVICE" ]]; then
-        systemctl restart "$PROXY_SERVICE" 2>/dev/null || true
+        restart_proxmorph_services false 2>/dev/null || true
     fi
     print_status "Restored ${PRODUCT} backup: ${backup_id}"
 }
@@ -1042,11 +1109,15 @@ preview_install_operation() {
         printf '  [modify] %s (load JavaScript patches/default theme)\n' "$INDEX_TEMPLATE"
         if [[ "$PRODUCT" == "PVE" ]]; then
             printf '  [optional] %s (only if hardware sensors are enabled)\n' "$NODES_PM"
+            printf '  [modify] %s (register replicated preference file)\n' "$PVE_CLUSTER_PM"
+            printf '  [modify] %s (register authenticated preferences API)\n' "$PVE_API2_PM"
+            printf '  [copy] %s -> %s\n' "$PVE_PREFERENCES_SOURCE_RELATIVE" "$PVE_PROXMORPH_API_PM"
+            printf '  [on first Apply] %s (per-user Inventory View settings)\n' "$PVE_PREFERENCES_FILE"
         fi
     fi
     printf '  [write] %s (release cache and installed-path ledger)\n' "$INSTALL_DIR"
     printf '  [write] %s\n' "$APT_HOOK_FILE"
-    printf '  [restart] %s\n' "$PROXY_SERVICE"
+    preview_service_restarts
 }
 
 preview_inventory_actions() {
@@ -1059,7 +1130,7 @@ preview_inventory_actions() {
         [[ -n "$path" ]] || continue
         if [[ "$scope" == "nonpackage" ]]; then
             case "$path" in
-                "$INDEX_TEMPLATE"|"$PROXMOXLIB_JS"|"$NODES_PM") continue ;;
+                "$INDEX_TEMPLATE"|"$PROXMOXLIB_JS"|"$NODES_PM"|"$PVE_CLUSTER_PM"|"$PVE_API2_PM") continue ;;
             esac
             if command -v dpkg &>/dev/null && dpkg -S "$path" &>/dev/null; then
                 printf '  [preserve current package] %s\n' "$path"
@@ -1067,7 +1138,7 @@ preview_inventory_actions() {
             fi
         elif [[ "$scope" == "package" ]]; then
             case "$path" in
-                "$INDEX_TEMPLATE"|"$PROXMOXLIB_JS"|"$NODES_PM") ;;
+                "$INDEX_TEMPLATE"|"$PROXMOXLIB_JS"|"$NODES_PM"|"$PVE_CLUSTER_PM"|"$PVE_API2_PM") ;;
                 *) continue ;;
             esac
         fi
@@ -1138,7 +1209,7 @@ preview_restore_operation() {
     echo ""
     print_info "Planned restore actions:"
     preview_inventory_actions "$backup_dir" all
-    printf '  [restart] %s\n' "$PROXY_SERVICE"
+    preview_service_restarts
 }
 
 preview_uninstall_assets() {
@@ -1171,6 +1242,9 @@ preview_uninstall_fallback_cleanup() {
         if [[ "$PRODUCT" == "PVE" ]]; then
             printf '  [modify] %s (remove sensor API block)\n' "$NODES_PM"
             printf '  [remove] %s\n' "$SENSORS_CONFIG" "$SENSORS_FILTER"
+            printf '  [modify] %s (remove preferences file registration)\n' "$PVE_CLUSTER_PM"
+            printf '  [modify] %s (remove preferences API registration)\n' "$PVE_API2_PM"
+            printf '  [remove] %s\n' "$PVE_PROXMORPH_API_PM" "$PVE_PREFERENCES_FILE"
             while IFS= read -r node; do
                 [[ -n "$node" ]] || continue
                 printf '  [back up] %s:%s\n' "$node" "$NODES_PM"
@@ -1187,7 +1261,7 @@ preview_current_package_reinstall() {
     local package=""
     print_info "Would reinstall the current ${PRODUCT} web package(s):"
     case "$PRODUCT" in
-        PVE) printf '%s\n' pve-manager proxmox-widget-toolkit ;;
+        PVE) printf '%s\n' pve-manager pve-cluster proxmox-widget-toolkit ;;
         PBS) printf '%s\n' proxmox-backup-server proxmox-widget-toolkit ;;
         PDM) printf '%s\n' proxmox-datacenter-manager-ui ;;
     esac | while IFS= read -r package; do
@@ -1243,7 +1317,7 @@ preview_uninstall_operation() {
         fi
     fi
     printf '  [retain] %s (all rollback backups)\n' "$(product_backup_dir)"
-    printf '  [restart] %s\n' "$PROXY_SERVICE"
+    preview_service_restarts
 }
 
 preview_default_theme_operation() {
@@ -1329,7 +1403,7 @@ preview_sensor_operation() {
             ;;
         *) print_error "Unknown sensor action: $action"; return 1 ;;
     esac
-    printf '  [restart] %s\n' "$PROXY_SERVICE"
+    preview_service_restarts
 }
 
 dry_run_dispatch() {
@@ -1467,7 +1541,7 @@ restore_packages() {
 restore_all_product_packages() {
     local packages=()
     case "$PRODUCT" in
-        PVE) packages=(pve-manager proxmox-widget-toolkit) ;;
+        PVE) packages=(pve-manager pve-cluster proxmox-widget-toolkit) ;;
         PBS) packages=(proxmox-backup-server proxmox-widget-toolkit) ;;
         PDM) packages=(proxmox-datacenter-manager-ui) ;;
     esac
@@ -1536,6 +1610,174 @@ DEFAULT_THEME_MARKER_END="<!-- /ProxMorph Default Theme -->"
 # PDM CSS Theme Override Configuration (Dynamic markers)
 PDM_CSS_MARKER="<!-- ProxMorph PDM Theme -->"
 PDM_CSS_MARKER_END="<!-- /ProxMorph PDM Theme -->"
+
+get_pve_preferences_api_source() {
+    local installer_source="${BASH_SOURCE[0]:-}"
+    local candidate=""
+
+    for candidate in \
+        "$(dirname "$installer_source")/${PVE_PREFERENCES_SOURCE_RELATIVE}" \
+        "${INSTALL_DIR}/${PVE_PREFERENCES_SOURCE_RELATIVE}"; do
+        [[ -f "$candidate" ]] || continue
+        printf '%s\n' "$candidate"
+        return 0
+    done
+
+    return 1
+}
+
+validate_marker_pair() {
+    local path="$1"
+    local start_marker="$2"
+    local end_marker="$3"
+    local start_count=0
+    local end_count=0
+
+    start_count=$(grep -cF "$start_marker" "$path" 2>/dev/null || true)
+    end_count=$(grep -cF "$end_marker" "$path" 2>/dev/null || true)
+    if [[ "$start_count" -eq 0 && "$end_count" -eq 0 ]]; then
+        return 0
+    fi
+    if [[ "$start_count" -eq 1 && "$end_count" -eq 1 ]]; then
+        return 0
+    fi
+
+    print_error "Unbalanced ProxMorph marker block in ${path}"
+    return 1
+}
+
+remove_marker_block() {
+    local path="$1"
+    local start_marker="$2"
+    local end_marker="$3"
+    local temporary=""
+
+    validate_marker_pair "$path" "$start_marker" "$end_marker" || return 1
+    grep -qF "$start_marker" "$path" 2>/dev/null || return 0
+    temporary=$(mktemp)
+    awk \
+        -v start="$start_marker" \
+        -v finish="$end_marker" \
+        'BEGIN { skipping = 0 }
+         index($0, start) { skipping = 1; next }
+         index($0, finish) { skipping = 0; next }
+         !skipping { print }
+         END { if (skipping) exit 42 }' \
+        "$path" > "$temporary" || {
+            rm -f "$temporary"
+            return 1
+        }
+    mv "$temporary" "$path"
+    chmod 644 "$path"
+}
+
+install_pve_preferences_api() {
+    [[ "$PRODUCT" == "PVE" ]] || return 0
+
+    local source=""
+    local cached_source="${INSTALL_DIR}/${PVE_PREFERENCES_SOURCE_RELATIVE}"
+    local temporary=""
+
+    source=$(get_pve_preferences_api_source) || {
+        print_error "ProxMorph preferences API source is missing: ${PVE_PREFERENCES_SOURCE_RELATIVE}"
+        return 1
+    }
+    [[ -f "$PVE_CLUSTER_PM" && -f "$PVE_API2_PM" ]] || {
+        print_error "Required PVE Perl modules are missing"
+        return 1
+    }
+
+    mkdir -p "$(dirname "$cached_source")"
+    if [[ "$source" != "$cached_source" ]]; then
+        cp "$source" "$cached_source"
+    fi
+
+    remove_marker_block "$PVE_CLUSTER_PM" "$PVE_CLUSTER_PREFS_MARKER" "$PVE_CLUSTER_PREFS_MARKER_END"
+    temporary=$(mktemp)
+    awk \
+        -v start="$PVE_CLUSTER_PREFS_MARKER" \
+        -v finish="$PVE_CLUSTER_PREFS_MARKER_END" \
+        -v config="    'priv/proxmorph-user-preferences.json' => 1," \
+        'BEGIN { inserted = 0 }
+         { print }
+         !inserted && $0 == "my $observed = {" {
+             print "    " start
+             print config
+             print "    " finish
+             inserted = 1
+         }
+         END { if (!inserted) exit 42 }' \
+        "$PVE_CLUSTER_PM" > "$temporary" || {
+            rm -f "$temporary"
+            print_error "Could not patch the PVE cluster preferences registry"
+            return 1
+        }
+    mv "$temporary" "$PVE_CLUSTER_PM"
+    chmod 644 "$PVE_CLUSTER_PM"
+
+    mkdir -p "$(dirname "$PVE_PROXMORPH_API_PM")"
+    cp "$cached_source" "$PVE_PROXMORPH_API_PM"
+    chmod 644 "$PVE_PROXMORPH_API_PM"
+    if ! perl -c "$PVE_PROXMORPH_API_PM" >/dev/null; then
+        print_error "ProxMorph preferences API failed its Perl syntax/load check"
+        return 1
+    fi
+
+    remove_marker_block "$PVE_API2_PM" "$PVE_API_PREFS_MARKER" "$PVE_API_PREFS_MARKER_END"
+    temporary=$(mktemp)
+    awk \
+        -v start="$PVE_API_PREFS_MARKER" \
+        -v finish="$PVE_API_PREFS_MARKER_END" \
+        'BEGIN { inserted = 0 }
+         !inserted && $0 == "use base qw(PVE::RESTHandler);" {
+             print
+             print ""
+             print start
+             print "use PVE::API2::ProxMorph;"
+             print ""
+             print "__PACKAGE__->register_method({"
+             print "    subclass => \"PVE::API2::ProxMorph\","
+             print "    path => '\''proxmorph'\'',"
+             print "});"
+             print finish
+             inserted = 1
+             next
+         }
+         { print }
+         END { if (!inserted) exit 42 }' \
+        "$PVE_API2_PM" > "$temporary" || {
+            rm -f "$temporary"
+            print_error "Could not register the ProxMorph preferences API"
+            return 1
+        }
+    mv "$temporary" "$PVE_API2_PM"
+    chmod 644 "$PVE_API2_PM"
+    if ! perl -c "$PVE_API2_PM" >/dev/null; then
+        print_error "PVE API root failed its Perl syntax/load check after registration"
+        return 1
+    fi
+
+    record_installed_path "$PVE_PROXMORPH_API_PM"
+    record_installed_path "$PVE_PREFERENCES_FILE"
+    print_status "Enabled cluster-wide per-user Inventory View preferences"
+}
+
+remove_pve_preferences_api() {
+    [[ "$PRODUCT" == "PVE" ]] || return 0
+
+    if [[ -f "$PVE_API2_PM" ]]; then
+        remove_marker_block "$PVE_API2_PM" "$PVE_API_PREFS_MARKER" "$PVE_API_PREFS_MARKER_END"
+    fi
+    if [[ -f "$PVE_CLUSTER_PM" ]]; then
+        remove_marker_block "$PVE_CLUSTER_PM" "$PVE_CLUSTER_PREFS_MARKER" "$PVE_CLUSTER_PREFS_MARKER_END"
+    fi
+    if path_exists "$PVE_PROXMORPH_API_PM"; then
+        remove_exact_path "$PVE_PROXMORPH_API_PM"
+    fi
+    if path_exists "$PVE_PREFERENCES_FILE"; then
+        remove_exact_path "$PVE_PREFERENCES_FILE"
+    fi
+}
 
 # Install JavaScript patches
 install_js_patches() {
@@ -1923,6 +2165,12 @@ JS_PATCH_MARKER_END="${JS_PATCH_MARKER_END}"
 PDM_CSS_MARKER="${PDM_CSS_MARKER}"
 PDM_CSS_MARKER_END="${PDM_CSS_MARKER_END}"
 PDM_THEMES_DIR="${PDM_THEMES_DIR}"
+PVE_CLUSTER_PM="${PVE_CLUSTER_PM}"
+PVE_API2_PM="${PVE_API2_PM}"
+PVE_PROXMORPH_API_PM="${PVE_PROXMORPH_API_PM}"
+PVE_PREFERENCES_SOURCE_RELATIVE="${PVE_PREFERENCES_SOURCE_RELATIVE}"
+PVE_CLUSTER_PREFS_MARKER="${PVE_CLUSTER_PREFS_MARKER}"
+PVE_API_PREFS_MARKER="${PVE_API_PREFS_MARKER}"
 DEFAULT_THEME_FILE="${DEFAULT_THEME_FILE}"
 DEFAULT_THEME_MARKER="${DEFAULT_THEME_MARKER}"
 DEFAULT_THEME_MARKER_END="${DEFAULT_THEME_MARKER_END}"
@@ -1984,6 +2232,19 @@ if [ "\$PRODUCT" != "PDM" ] && [ -f "\$DEFAULT_THEME_FILE" ] && ! grep -q "\$DEF
     needs_repatch=true
 fi
 
+# PVE package updates replace both Perl registration points. The custom module
+# is compared with the cached release so source updates are also applied.
+if [ "\$PRODUCT" = "PVE" ]; then
+    preferences_source="\${INSTALL_DIR}/\${PVE_PREFERENCES_SOURCE_RELATIVE}"
+    if ! grep -qF "\$PVE_CLUSTER_PREFS_MARKER" "\$PVE_CLUSTER_PM" 2>/dev/null || \
+       ! grep -qF "\$PVE_API_PREFS_MARKER" "\$PVE_API2_PM" 2>/dev/null || \
+       [ ! -f "\$PVE_PROXMORPH_API_PM" ] || \
+       [ ! -f "\$preferences_source" ] || \
+       ! cmp -s "\$preferences_source" "\$PVE_PROXMORPH_API_PM"; then
+        needs_repatch=true
+    fi
+fi
+
 if [ "\$needs_repatch" = "true" ]; then
     # Re-run the same capability checks after a package update. If Proxmox has
     # changed a patch point, leave the new package files untouched and log the
@@ -2014,6 +2275,25 @@ if [ "\$needs_repatch" = "true" ]; then
                     break
                 fi
             done
+        fi
+    fi
+
+    if [ -z "\$compatibility_error" ] && [ "\$PRODUCT" = "PVE" ]; then
+        preferences_source="\${INSTALL_DIR}/\${PVE_PREFERENCES_SOURCE_RELATIVE}"
+        if [ ! -f "\$preferences_source" ]; then
+            compatibility_error="missing cached preferences API: \$preferences_source"
+        elif [ ! -f "\$PVE_CLUSTER_PM" ]; then
+            compatibility_error="missing PVE cluster module: \$PVE_CLUSTER_PM"
+        elif [ ! -f "\$PVE_API2_PM" ]; then
+            compatibility_error="missing PVE API root module: \$PVE_API2_PM"
+        else
+            cluster_preferences_anchor_count=\$(grep -cF 'my \$observed = {' "\$PVE_CLUSTER_PM" 2>/dev/null || true)
+            preferences_api_anchor_count=\$(grep -cF 'use base qw(PVE::RESTHandler);' "\$PVE_API2_PM" 2>/dev/null || true)
+            if [ "\$cluster_preferences_anchor_count" -ne 1 ]; then
+                compatibility_error="expected one cluster preferences anchor, found \$cluster_preferences_anchor_count"
+            elif [ "\$preferences_api_anchor_count" -ne 1 ]; then
+                compatibility_error="expected one preferences API anchor, found \$preferences_api_anchor_count"
+            fi
         fi
     fi
 
@@ -2253,10 +2533,23 @@ DTBLOCK
                 fi
             fi
         fi
+
+        if [ "\$PRODUCT" = "PVE" ]; then
+            PROXMORPH_APT_REPATCH=true \
+                PROXMORPH_SKIP_LOCK=true \
+                PROXMORPH_BACKUP_ROOT="\$BACKUP_ROOT" \
+                "\${INSTALL_DIR}/install.sh" reapply-preferences-api >> "\$LOG_FILE" 2>&1
+            log "Re-applied authenticated Inventory View preferences API"
+        fi
     fi  # end PVE/PBS else branch
 
-    # Restart proxy service to apply changes
-    systemctl restart "\$PROXY_SERVICE" 2>/dev/null || true
+    # Protected PVE API routes execute in pvedaemon, while the browser connects
+    # through pveproxy. Reload both after a Perl API patch.
+    if [ "\$PRODUCT" = "PVE" ]; then
+        systemctl restart pvedaemon "\$PROXY_SERVICE" 2>/dev/null || true
+    else
+        systemctl restart "\$PROXY_SERVICE" 2>/dev/null || true
+    fi
     trap - ERR
     log "ProxMorph patches re-applied successfully"
 fi
@@ -2693,7 +2986,7 @@ patch_cluster_sensors() {
                 ssh -n -o ConnectTimeout=5 "root@${node}" "mkdir -p '$(dirname "$SENSORS_FILTER")'" 2>/dev/null || return 1
                 scp -o ConnectTimeout=5 -q "$SENSORS_FILTER" "root@${node}:${SENSORS_FILTER}" 2>/dev/null || return 1
             fi
-            if ssh -n -o ConnectTimeout=5 "root@${node}" "systemctl restart pveproxy" 2>/dev/null; then
+            if ssh -n -o ConnectTimeout=5 "root@${node}" "systemctl restart pvedaemon pveproxy" 2>/dev/null; then
                 print_status "Sensors deployed to ${node}"
             else
                 print_error "Patched ${node} but failed to restart pveproxy; rolling back"
@@ -2724,7 +3017,7 @@ unpatch_cluster_sensors() {
             fi
         fi
         if ssh -n -o ConnectTimeout=5 "root@${node}" \
-            "sed -i '/# ProxMorph Sensors/,/# ProxMorph Sensors END/d' /usr/share/perl5/PVE/API2/Nodes.pm 2>/dev/null && systemctl restart pveproxy" 2>/dev/null; then
+            "sed -i '/# ProxMorph Sensors/,/# ProxMorph Sensors END/d' /usr/share/perl5/PVE/API2/Nodes.pm 2>/dev/null && systemctl restart pvedaemon pveproxy" 2>/dev/null; then
             print_status "Sensors removed from ${node}"
         else
             print_error "Failed to unpatch ${node}; rolling back"
@@ -2810,8 +3103,8 @@ manage_sensors() {
             mkdir -p "$INSTALL_DIR"
             echo "enabled" > "$SENSORS_CONFIG"
             print_status "Hardware sensor monitoring enabled!"
-            print_info "Restarting ${PROXY_SERVICE}..."
-            nohup systemctl restart "${PROXY_SERVICE}" &>/dev/null &
+            print_info "Restarting PVE API services..."
+            restart_proxmorph_services true
             patch_cluster_sensors
             if [[ "$owns_transaction" == "true" ]]; then
                 commit_transaction
@@ -2828,8 +3121,8 @@ manage_sensors() {
             fi
             remove_sensors
             print_status "Hardware sensor monitoring disabled"
-            print_info "Restarting ${PROXY_SERVICE}..."
-            nohup systemctl restart "${PROXY_SERVICE}" &>/dev/null &
+            print_info "Restarting PVE API services..."
+            restart_proxmorph_services true
             if [[ "$owns_transaction" == "true" ]]; then
                 commit_transaction
             fi
@@ -2854,8 +3147,8 @@ manage_sensors() {
             # Re-patch Nodes.pm so the filter file path is current
             unpatch_nodes_pm
             patch_nodes_pm
-            print_info "Restarting ${PROXY_SERVICE}..."
-            systemctl restart "${PROXY_SERVICE}"
+            print_info "Restarting PVE API services..."
+            restart_proxmorph_services false
             print_status "Sensor filter applied!"
             if [[ "$owns_transaction" == "true" ]]; then
                 commit_transaction
@@ -3031,7 +3324,7 @@ install_themes() {
         
         # Restart service
         print_info "Restarting ${PROXY_SERVICE} service in background..."
-        nohup systemctl restart "${PROXY_SERVICE}" &>/dev/null &
+        restart_proxmorph_services true
         commit_transaction
         return 0
     fi
@@ -3078,6 +3371,11 @@ install_themes() {
         mkdir -p "${INSTALL_DIR}/themes/patches"
         cp "${themes_source}/patches"/*.js "${INSTALL_DIR}/themes/patches/" 2>/dev/null || true
     fi
+
+    # PVE stores Inventory View settings per authenticated account in pmxcfs.
+    # This is installed before the hook so package updates can reapply the same
+    # validated server-side extension from the cached release.
+    install_pve_preferences_api
     
     # Install apt hook for persistence across updates
     install_apt_hook
@@ -3105,9 +3403,9 @@ install_themes() {
     print_info "  2. Click your username → Color Theme"
     print_info "  3. Select a ProxMorph theme from the dropdown"
     
-    # Restart proxy service in background
-    print_info "Restarting ${PROXY_SERVICE} service in background..."
-    nohup systemctl restart "${PROXY_SERVICE}" &>/dev/null &
+    # PVE's protected preference API runs in pvedaemon; reload it with pveproxy.
+    print_info "Restarting ${PRODUCT} API services in background..."
+    restart_proxmorph_services true
     commit_transaction
 }
 
@@ -3238,7 +3536,10 @@ uninstall_themes() {
         else
             remove_js_patches
             remove_default_theme_injection
-            [[ "$PRODUCT" == "PVE" ]] && remove_sensors
+            if [[ "$PRODUCT" == "PVE" ]]; then
+                remove_sensors
+                remove_pve_preferences_api
+            fi
         fi
         remove_apt_hook
         if path_exists "$CONFIG_DIR"; then remove_exact_path "$CONFIG_DIR"; fi
@@ -3266,8 +3567,8 @@ uninstall_themes() {
     else
         print_info "Clear your browser cache to see the changes."
     fi
-    print_info "Restarting ${PROXY_SERVICE}..."
-    nohup systemctl restart "${PROXY_SERVICE}" &>/dev/null &
+    print_info "Restarting ${PRODUCT} API services..."
+    restart_proxmorph_services true
 }
 
 # List available themes
@@ -3530,6 +3831,13 @@ main() {
             ;;
         default-theme)
             manage_default_theme "${2:-}"
+            ;;
+        reapply-preferences-api)
+            if [[ "${PROXMORPH_APT_REPATCH:-false}" != "true" ]]; then
+                print_error "reapply-preferences-api is reserved for the ProxMorph APT hook"
+                return 1
+            fi
+            install_pve_preferences_api
             ;;
         *)
             while true; do

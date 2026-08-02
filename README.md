@@ -164,7 +164,14 @@ Datacenter
     └── VM or Container
 ```
 
-Click the sitemap button next to the native Tree Settings gear to show or hide virtual machines, containers, templates, storage, SDN/network resources, stopped guests, node grouping, and pool grouping. The same modal includes **Expand all** and **Collapse all** actions.
+Click the sitemap button next to the native Tree Settings gear to show or hide virtual machines, containers, templates, storage, SDN/network resources, stopped guests, the node level, and pool folders. The same modal includes **Expand all** and **Collapse all** actions. Inventory is guest-focused by default: VMs, containers, and templates appear there, while storage and connectivity remain in their dedicated views unless explicitly enabled.
+
+**Show node level in hierarchy** controls the two layouts directly:
+
+- Enabled: `Datacenter → node → resource pool → guest`
+- Disabled: `Datacenter → resource pool → guest` (the node records are hidden and guests are flattened into their pool folders)
+
+Guests without a Proxmox resource-pool assignment remain directly under Datacenter when the node level is hidden; ProxMorph does not invent a folder or change their pool membership.
 
 Enable **Use icon view switcher** in that modal to replace the dropdown with four vCenter-style view shortcuts:
 
@@ -177,7 +184,9 @@ Enable **Use icon view switcher** in that modal to replace the dropdown with fou
 
 Hovering an icon shows its name, cluster/host label, and hierarchy. In icon mode, custom views label the root with the current PVE hostname; Proxmox continues to append the configured cluster name when available. The active view uses a compact underline while colors and typography continue to come from the selected ProxMorph theme.
 
-The selected view participates in Proxmox's native URL/history state. The modal's visibility, hierarchy, and icon-switcher choices are intentionally scoped to the current page and reset after a reload; they are not written to `localStorage`. Durable modal preferences require an authenticated server-side settings store, which is not part of this frontend-only patch. The hierarchy itself comes from the resource pools already configured in Proxmox; slash-delimited pools follow Proxmox's native **Nest Pools** tree setting. Pools remain Proxmox permission/resource groups—not vCenter VM folders.
+The selected view participates in Proxmox's native URL/history state. The modal's visibility, hierarchy, and icon-switcher choices are saved for the authenticated Proxmox username by `/api2/extjs/proxmorph/preferences`; no browser `localStorage` is used. PVE stores the small JSON preference map at `/etc/pve/priv/proxmorph-user-preferences.json`, so pmxcfs replicates it across cluster nodes. The API only reads or writes the current authenticated account's entry and does not alter `user.cfg` or add properties to Proxmox user objects. This account-level preference service is PVE-only; PDM inventory support remains a separate future implementation.
+
+The hierarchy itself comes from the resource pools already configured in Proxmox; slash-delimited pools follow Proxmox's native **Nest Pools** tree setting. Pools remain Proxmox permission/resource groups—not vCenter VM folders.
 
 ## 🔍 What the installer changes on your system
 
@@ -187,6 +196,7 @@ Run as root, `install.sh` makes only these changes, all reversible with `./insta
 - **Theme registration:** `sed`-patches the `theme_map` in `proxmoxlib.js` so the themes appear in the native Color Theme selector.
 - **Index template:** injects `<script>` / `<link>` tags into the product index template for the JS patches and (PDM) theme links.
 - **Compatibility preflight:** validates the installed package version, template insertion points, theme map, PVE UI loader, and sensor anchor before modifying package-owned files.
+- **PVE account preferences:** installs a protected API module, registers one pmxcfs preference file, and patches the PVE API root so Inventory View settings follow the authenticated account across cluster nodes.
 - **Persistence:** installs an APT hook at `/etc/apt/apt.conf.d/99proxmorph` that runs `/opt/proxmorph/post-update.sh` to back up the new package files and re-apply the patches after a Proxmox update. The hook re-patches from the local `/opt/proxmorph` copy only; it downloads nothing.
 - **Sensors (PVE, optional):** if you enable sensor display, edits `Nodes.pm` to expose `lm-sensors` data.
 
@@ -194,9 +204,9 @@ Run as root, `install.sh` makes only these changes, all reversible with `./insta
 
 Before every install, update, reinstall, restore, uninstall, default-theme change, or sensor change, ProxMorph creates a versioned backup under `/root/.proxmorph-backups/<product>/`. The first clean snapshot becomes the uninstall baseline. Backups include:
 
-- Every package-owned file ProxMorph edits: `proxmoxlib.js`, the product index template, and (PVE sensors) `Nodes.pm`.
+- Every package-owned file ProxMorph edits: `proxmoxlib.js`, the product index template, and on PVE `Nodes.pm`, `PVE/Cluster.pm`, and `PVE/API2.pm` as applicable.
 - Every destination theme file that may be overwritten, including whether it was originally absent.
-- ProxMorph JavaScript/theme directories, `/opt/proxmorph`, `/etc/proxmorph`, the APT hook, and the ProxMorph log.
+- ProxMorph JavaScript/theme directories, `/opt/proxmorph`, `/etc/proxmorph`, the PVE preferences API module and replicated per-user preference file, the APT hook, and the ProxMorph log.
 - Original remote `Nodes.pm` and sensor-filter state before optional cluster sensor deployment.
 - Product package versions, file state, preserved ownership/modes, and SHA-256 checksums.
 
@@ -216,7 +226,7 @@ Add `--dry-run` anywhere on an `install`, `update`, `reinstall`, `backup`, `rest
 
 `uninstall` asks for confirmation, backs up the installed state, then restores the clean same-version baseline. If the baseline belongs to an older Proxmox package version, the installer uses the newest verified `apt-repatch` snapshot of the current clean package files when available; otherwise it reinstalls the currently selected Proxmox web packages. Pre-existing non-package files still come from the baseline, and stale package files are never restored implicitly. Backups are retained and never pruned automatically.
 
-This is a full backup of the installer's system footprint, not a backup of VMs, containers, storage, or `/etc/pve`, which ProxMorph does not modify.
+This is a full backup of the installer's system footprint, not a backup of VMs, containers, or storage. On PVE, ProxMorph modifies only its own `/etc/pve/priv/proxmorph-user-preferences.json` data file; it does not modify guest configuration, `user.cfg`, storage configuration, or other Proxmox cluster settings.
 
 ## 🛠️ Creating Themes
 

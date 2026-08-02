@@ -18,6 +18,11 @@ function walk(directory, predicate) {
 
 const cssFiles = walk(path.join(root, 'themes'), (file) => file.endsWith('.css'));
 const jsFiles = walk(path.join(root, 'themes', 'patches'), (file) => file.endsWith('.js'));
+const releaseWorkflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'release.yml'), 'utf8');
+const preferencesApi = path.join(root, 'server', 'PVE', 'API2', 'ProxMorph.pm');
+
+assert.ok(fs.existsSync(preferencesApi), 'authenticated preferences API source is present');
+assert.match(releaseWorkflow, /cp -r server release\//, 'release archives include server-side modules');
 
 for (const file of cssFiles) {
     const source = fs.readFileSync(file, 'utf8');

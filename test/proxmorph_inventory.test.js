@@ -8,7 +8,7 @@ require(path.join(__dirname, '..', 'themes', 'patches', 'proxmorph-inventory.js'
 
 const inventory = global.window.ProxMorphInventory;
 assert.ok(inventory, 'inventory API is exposed');
-assert.equal(inventory.version, '1.1.0');
+assert.equal(inventory.version, '1.2.0');
 assert.equal(inventory.compatible, false, 'headless test does not claim an ExtJS match');
 
 let view = inventory.buildViewFilter();
@@ -20,9 +20,9 @@ assert.equal(visible({ data: { type: 'pool', pool: 'Automation' } }), false);
 assert.equal(visible({ data: { type: 'qemu', status: 'running' } }), true);
 assert.equal(visible({ data: { type: 'lxc', status: 'stopped' } }), true);
 assert.equal(visible({ data: { type: 'qemu', template: 1 } }), true);
-assert.equal(visible({ data: { type: 'storage' } }), true);
-assert.equal(visible({ data: { type: 'sdn' } }), true);
-assert.equal(visible({ data: { type: 'network' } }), true);
+assert.equal(visible({ data: { type: 'storage' } }), false);
+assert.equal(visible({ data: { type: 'sdn' } }), false);
+assert.equal(visible({ data: { type: 'network' } }), false);
 assert.equal(visible({ data: { type: 'unknown' } }), false);
 
 inventory.setSettings({
@@ -79,8 +79,8 @@ assert.deepEqual(inventory.resetSettings(), {
     showVirtualMachines: true,
     showContainers: true,
     showTemplates: true,
-    showStorage: true,
-    showNetwork: true,
+    showStorage: false,
+    showNetwork: false,
     showStoppedGuests: true,
 });
 

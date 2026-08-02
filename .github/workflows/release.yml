@@ -49,6 +49,7 @@ jobs:
           cp install.sh release/
           cp patch_theme_map.sh release/
           cp -r themes release/
+          cp -r server release/
           cp README.md release/
           cp CHANGELOG.md release/
           cd release && tar -czvf ../proxmorph-${{ steps.version.outputs.VERSION }}.tar.gz .

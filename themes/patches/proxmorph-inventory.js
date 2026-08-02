@@ -9,11 +9,11 @@
  * Compatibility: Proxmox VE 8.x, 9.2.6+, and later releases that retain the
  * PVE.form.ViewSelector and PVE.tree.ResourceTree extension points.
  *
- * Preferences are intentionally held in memory for the current page. The
- * selected view uses Proxmox's native URL state, but modal preferences do not
- * add browser-local persistence.
+ * Preferences are stored per authenticated Proxmox user through ProxMorph's
+ * protected API and the replicated Proxmox cluster filesystem. The selected
+ * view itself continues to use Proxmox's native URL state.
  *
- * Version: 1.1.0
+ * Version: 1.2.0
  */
 (function () {
     'use strict';
@@ -22,10 +22,12 @@
     var VIEW_NAME = 'Inventory View';
     var STORAGE_VIEW_KEY = 'proxmorph-storage';
     var CONNECTIVITY_VIEW_KEY = 'proxmorph-connectivity';
-    var VERSION = '1.1.0';
+    var VERSION = '1.2.0';
+    var PREFERENCES_URL = '/proxmorph/preferences';
     var MAX_INIT_ATTEMPTS = 40;
     var initAttempts = 0;
     var initialized = false;
+    var preferencesAvailable = false;
 
     var defaults = {
         useIconNavigation: false,
@@ -34,8 +36,8 @@
         showVirtualMachines: true,
         showContainers: true,
         showTemplates: true,
-        showStorage: true,
-        showNetwork: true,
+        showStorage: false,
+        showNetwork: false,
         showStoppedGuests: true,
     };
 
@@ -61,6 +63,80 @@
             }
         });
         return copySettings(settings);
+    }
+
+    function hasPreferencesAPI() {
+        return (
+            typeof Proxmox !== 'undefined' &&
+            Proxmox.Utils &&
+            typeof Proxmox.Utils.API2Request === 'function'
+        );
+    }
+
+    function serializeSettings(values) {
+        var serialized = {};
+        var normalized = copySettings(defaults);
+        Object.keys(defaults).forEach(function (key) {
+            if (Object.prototype.hasOwnProperty.call(values || {}, key)) {
+                normalized[key] =
+                    values[key] === true ||
+                    values[key] === 1 ||
+                    values[key] === '1' ||
+                    values[key] === 'true' ||
+                    values[key] === 'on';
+            }
+            serialized[key] = normalized[key] ? 1 : 0;
+        });
+        return serialized;
+    }
+
+    function loadPreferences(callback) {
+        if (!hasPreferencesAPI()) {
+            callback();
+            return;
+        }
+
+        Proxmox.Utils.API2Request({
+            url: PREFERENCES_URL,
+            method: 'GET',
+            success: function (response) {
+                updateSettings(response && response.result ? response.result.data : {});
+                preferencesAvailable = true;
+                callback();
+            },
+            failure: function (response) {
+                preferencesAvailable = false;
+                if (window.console && console.warn) {
+                    console.warn(
+                        '[ProxMorph Inventory] User preferences could not be loaded; using defaults.',
+                        response && response.htmlStatus ? response.htmlStatus : '',
+                    );
+                }
+                callback();
+            },
+        });
+    }
+
+    function savePreferences(values, waitTarget, success, failure) {
+        if (!hasPreferencesAPI()) {
+            success(false);
+            return;
+        }
+
+        Proxmox.Utils.API2Request({
+            url: PREFERENCES_URL,
+            method: 'PUT',
+            params: serializeSettings(values),
+            waitMsgTarget: waitTarget,
+            success: function () {
+                preferencesAvailable = true;
+                success(true);
+            },
+            failure: function (response) {
+                preferencesAvailable = false;
+                failure(response);
+            },
+        });
     }
 
     function resourceIsVisible(item) {
@@ -310,12 +386,14 @@
                 },
                 {
                     name: 'groupByNode',
-                    fieldLabel: 'Group guests by node',
+                    fieldLabel: 'Show node level in hierarchy',
+                    boxLabel: 'Datacenter → node → resource pool → guest',
                     checked: settings.groupByNode,
                 },
                 {
                     name: 'showPools',
-                    fieldLabel: 'Group guests by resource pool',
+                    fieldLabel: 'Show resource-pool folders',
+                    boxLabel: 'Keep guests organized inside their Proxmox pools',
                     checked: settings.showPools,
                 },
                 {
@@ -351,7 +429,9 @@
                 {
                     xtype: 'displayfield',
                     fieldLabel: 'Preference scope',
-                    value: 'Current page only',
+                    value: preferencesAvailable
+                        ? 'Authenticated Proxmox user account (cluster-wide)'
+                        : 'Server unavailable; Apply will retry account saving',
                     userCls: 'pmx-hint',
                 },
             ],
@@ -398,10 +478,32 @@
                 {
                     text: 'Apply',
                     handler: function () {
-                        updateSettings(form.getForm().getValues());
-                        syncNavigationMode(viewSelector);
-                        refreshInventoryView(viewSelector, resourceTree);
-                        win.close();
+                        var button = this;
+                        var values = form.getForm().getValues();
+                        if (button.setDisabled) {
+                            button.setDisabled(true);
+                        }
+                        savePreferences(
+                            values,
+                            win,
+                            function () {
+                                updateSettings(values);
+                                syncNavigationMode(viewSelector);
+                                refreshInventoryView(viewSelector, resourceTree);
+                                win.close();
+                            },
+                            function (response) {
+                                if (button.setDisabled) {
+                                    button.setDisabled(false);
+                                }
+                                Ext.Msg.alert(
+                                    'Unable to save Inventory View settings',
+                                    response && response.htmlStatus
+                                        ? response.htmlStatus
+                                        : 'The ProxMorph preferences service is unavailable.',
+                                );
+                            },
+                        );
                     },
                 },
                 {
@@ -644,13 +746,15 @@
         }
 
         installView(viewSelector, resourceTree);
-        installNavigation(viewSelector, resourceTree);
-        installSettingsButton(viewSelector, resourceTree);
-        restoreCustomViewState(viewSelector);
-        syncNavigationMode(viewSelector);
         initialized = true;
-        window.ProxMorphInventory.compatible = true;
-        console.log('[ProxMorph] Inventory View initialized (v' + VERSION + ')');
+        loadPreferences(function () {
+            installNavigation(viewSelector, resourceTree);
+            installSettingsButton(viewSelector, resourceTree);
+            restoreCustomViewState(viewSelector);
+            syncNavigationMode(viewSelector);
+            window.ProxMorphInventory.compatible = true;
+            console.log('[ProxMorph] Inventory View initialized (v' + VERSION + ')');
+        });
     }
 
     window.ProxMorphInventory = {
@@ -665,6 +769,9 @@
         resetSettings: function () {
             settings = copySettings(defaults);
             return copySettings(settings);
+        },
+        preferencesAvailable: function () {
+            return preferencesAvailable;
         },
     };
 
