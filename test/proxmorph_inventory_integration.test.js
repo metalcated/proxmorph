@@ -12,6 +12,66 @@ let navigation;
 let rootText = 'Datacenter';
 const apiRequests = [];
 
+function makeNode(id, children = [], expanded = false, text = id) {
+    const node = {
+        data: { id, text },
+        childNodes: children,
+        expanded,
+        isLeaf() {
+            return this.childNodes.length === 0;
+        },
+        isExpanded() {
+            return this.expanded;
+        },
+        expand() {
+            this.expanded = true;
+        },
+        collapse() {
+            this.expanded = false;
+        },
+        cascadeBy(callback) {
+            callback(this);
+            this.childNodes.forEach((child) => child.cascadeBy(callback));
+        },
+        set(field, value) {
+            this.data[field] = value;
+            if (id === 'root' && field === 'text') {
+                rootText = value;
+            }
+        },
+    };
+    return node;
+}
+
+function makeRoot(viewId) {
+    const branchId =
+        viewId === 'proxmorph-inventory'
+            ? 'pool/Automation'
+            : viewId === 'proxmorph-storage'
+              ? 'storage/pve01/local-zfs'
+              : viewId === 'proxmorph-connectivity'
+                ? 'network/pve01/vmbr0'
+                : 'node/pve01';
+    return makeNode(
+        'root',
+        [makeNode(branchId, [makeNode(`${branchId}/guest`)], false)],
+        true,
+        'Datacenter',
+    );
+}
+
+function findNode(root, id) {
+    let match = null;
+    root.cascadeBy((node) => {
+        if (node.data.id === id) {
+            match = node;
+        }
+    });
+    return match;
+}
+
+let currentRoot = makeRoot('server');
+
 const store = {
     add(record) {
         records.push(record);
@@ -73,20 +133,17 @@ const tree = {
     setViewFilter(view) {
         rootText = 'Datacenter';
         appliedView = view;
+        currentRoot = makeRoot(view.id);
     },
-    expandAll() {},
-    collapseAll() {},
+    expandAll() {
+        currentRoot.cascadeBy((node) => node.expand());
+    },
+    collapseAll() {
+        currentRoot.cascadeBy((node) => node.collapse());
+    },
     getStore() {
         return {
-            getRootNode: () => ({
-                data: { text: rootText },
-                set(field, value) {
-                    if (field === 'text') {
-                        rootText = value;
-                    }
-                },
-                expand() {},
-            }),
+            getRootNode: () => currentRoot,
         };
     },
 };
@@ -192,6 +249,9 @@ assert.match(
 
 assert.equal(selector.getViewFilter().id, 'server', 'native view behavior remains intact');
 
+findNode(currentRoot, 'node/pve01').expand();
+assert.equal(findNode(currentRoot, 'node/pve01').isExpanded(), true);
+
 settingsButton.handler();
 assert.equal(settingsWindow.config.modal, true, 'settings use an in-app modal');
 assert.ok(
@@ -239,6 +299,9 @@ assert.equal(
     'active icon follows the selected view',
 );
 
+findNode(currentRoot, 'pool/Automation').expand();
+assert.equal(findNode(currentRoot, 'pool/Automation').isExpanded(), true);
+
 navigationItems.find((item) => item.ariaLabel === 'Storage view').handler();
 assert.equal(selector.getValue(), 'proxmorph-storage');
 assert.equal(appliedView.id, 'proxmorph-storage');
@@ -255,5 +318,17 @@ navigationItems.find((item) => item.ariaLabel === 'Datacenter view').handler();
 assert.equal(selector.getValue(), 'server');
 assert.equal(appliedView.id, 'server', 'Datacenter icon returns to native Server View');
 assert.equal(rootText, 'Datacenter', 'native Datacenter view restores the native root label');
+assert.equal(
+    findNode(currentRoot, 'node/pve01').isExpanded(),
+    true,
+    'Datacenter expansion state survives switching through custom views',
+);
+
+navigationItems.find((item) => item.ariaLabel === 'Inventory view').handler();
+assert.equal(
+    findNode(currentRoot, 'pool/Automation').isExpanded(),
+    true,
+    'Inventory expansion state is restored independently from Datacenter state',
+);
 
 console.log('PASS: ProxMorph Inventory and icon views integrate with native PVE tree controls');

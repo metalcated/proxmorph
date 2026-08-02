@@ -8,7 +8,7 @@ require(path.join(__dirname, '..', 'themes', 'patches', 'proxmorph-inventory.js'
 
 const inventory = global.window.ProxMorphInventory;
 assert.ok(inventory, 'inventory API is exposed');
-assert.equal(inventory.version, '1.2.0');
+assert.equal(inventory.version, '1.3.0');
 assert.equal(inventory.compatible, false, 'headless test does not claim an ExtJS match');
 
 let view = inventory.buildViewFilter();

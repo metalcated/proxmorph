@@ -13,7 +13,7 @@
  * protected API and the replicated Proxmox cluster filesystem. The selected
  * view itself continues to use Proxmox's native URL state.
  *
- * Version: 1.2.0
+ * Version: 1.3.0
  */
 (function () {
     'use strict';
@@ -22,12 +22,13 @@
     var VIEW_NAME = 'Inventory View';
     var STORAGE_VIEW_KEY = 'proxmorph-storage';
     var CONNECTIVITY_VIEW_KEY = 'proxmorph-connectivity';
-    var VERSION = '1.2.0';
+    var VERSION = '1.3.0';
     var PREFERENCES_URL = '/proxmorph/preferences';
     var MAX_INIT_ATTEMPTS = 40;
     var initAttempts = 0;
     var initialized = false;
     var preferencesAvailable = false;
+    var expansionStateByView = {};
 
     var defaults = {
         useIconNavigation: false,
@@ -254,6 +255,82 @@
         return trees && trees.length ? trees[0] : null;
     }
 
+    function visitTreeNodes(root, callback) {
+        if (!root) {
+            return;
+        }
+        if (root.cascadeBy) {
+            root.cascadeBy(callback);
+            return;
+        }
+        callback(root);
+        (root.childNodes || []).forEach(function (child) {
+            visitTreeNodes(child, callback);
+        });
+    }
+
+    function isExpandableNode(node) {
+        if (!node) {
+            return false;
+        }
+        if (node.isLeaf && node.isLeaf()) {
+            return false;
+        }
+        return !node.isLeaf || (node.childNodes && node.childNodes.length > 0);
+    }
+
+    function captureExpansionState(resourceTree, viewKey) {
+        if (!resourceTree || !viewKey || !resourceTree.getStore) {
+            return;
+        }
+        var root = resourceTree.getStore().getRootNode();
+        var expanded = [];
+        visitTreeNodes(root, function (node) {
+            if (
+                node !== root &&
+                isExpandableNode(node) &&
+                node.isExpanded &&
+                node.isExpanded() &&
+                node.data &&
+                node.data.id
+            ) {
+                expanded.push(node.data.id);
+            }
+        });
+        expansionStateByView[viewKey] = expanded;
+    }
+
+    function restoreExpansionState(resourceTree, viewKey) {
+        if (
+            !resourceTree ||
+            !viewKey ||
+            !resourceTree.getStore ||
+            !Object.prototype.hasOwnProperty.call(expansionStateByView, viewKey)
+        ) {
+            return;
+        }
+        var root = resourceTree.getStore().getRootNode();
+        var expanded = {};
+        expansionStateByView[viewKey].forEach(function (id) {
+            expanded[id] = true;
+        });
+        visitTreeNodes(root, function (node) {
+            if (node === root || !isExpandableNode(node) || !node.data || !node.data.id) {
+                return;
+            }
+            if (expanded[node.data.id]) {
+                if (node.expand) {
+                    node.expand(false);
+                }
+            } else if (node.collapse) {
+                node.collapse(false);
+            }
+        });
+        if (root && root.expand) {
+            root.expand(false);
+        }
+    }
+
     function setInventoryMode(viewSelector, resourceTree) {
         var isInventory = viewSelector.getValue() === VIEW_KEY;
         if (resourceTree && resourceTree.toggleCls) {
@@ -287,6 +364,10 @@
         if (!record) {
             return;
         }
+        var previousView = viewSelector.getValue();
+        if (previousView !== viewKey) {
+            captureExpansionState(resourceTree, previousView);
+        }
         viewSelector.setValue(viewKey);
         viewSelector.fireEvent('select', viewSelector, [record]);
         setInventoryMode(viewSelector, resourceTree);
@@ -296,7 +377,9 @@
 
     function refreshInventoryView(viewSelector, resourceTree) {
         if (viewSelector.getValue() === VIEW_KEY) {
+            captureExpansionState(resourceTree, VIEW_KEY);
             resourceTree.setViewFilter(buildInventoryViewFilter());
+            restoreExpansionState(resourceTree, VIEW_KEY);
             labelIconViewRoot(viewSelector, resourceTree);
         } else {
             selectView(viewSelector, resourceTree, VIEW_KEY);
@@ -547,8 +630,12 @@
 
         viewSelector.on('select', function () {
             setInventoryMode(viewSelector, resourceTree);
+            restoreExpansionState(resourceTree, viewSelector.getValue());
             labelIconViewRoot(viewSelector, resourceTree);
             updateNavigationSelection(viewSelector);
+        });
+        viewSelector.on('beforeselect', function () {
+            captureExpansionState(resourceTree, viewSelector.getValue());
         });
     }
 
@@ -773,6 +860,8 @@
         preferencesAvailable: function () {
             return preferencesAvailable;
         },
+        captureExpansionState: captureExpansionState,
+        restoreExpansionState: restoreExpansionState,
     };
 
     // Exposing the pure filter builder before this guard keeps it testable
