@@ -510,6 +510,26 @@ assert.match(
     /--proxmorph-ui-font: "Roboto Flex", "Segoe UI Variable"/,
     'the modern option uses a native variable-font stack without changing icon fonts',
 );
+assert.match(
+    navigationStyle.css,
+    /html\.proxmorph-font-modern \.x-treelist-item-text[^}]*font-family: var\(--proxmorph-ui-font\) !important;/,
+    'the VM and container navigation treelist inherits the selected interface font',
+);
+assert.match(
+    navigationStyle.css,
+    /html\[class\*="proxmorph-text-"\] \.x-treelist-item-text[^}]*font-size: var\(--proxmorph-ui-size\) !important;/,
+    'the VM and container navigation treelist inherits the selected text scale',
+);
+assert.match(
+    navigationStyle.css,
+    /html body \.x-menu-body-default[^}]*var\(--pm-bg-surface, var\(--gh-canvas-muted\)\) !important;/,
+    'floating menus resolve their surface color from the active theme tokens',
+);
+assert.match(
+    navigationStyle.css,
+    /html body \.x-panel-header-title-default[^}]*var\(--pm-text, var\(--gh-fg-default\)\) !important;/,
+    'default ExtJS title subclasses resolve text color from the active theme tokens',
+);
 
 const applyButton = settingsWindow.config.buttons.find((button) => button.text === 'Apply');
 applyButton.handler();

@@ -22,7 +22,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **No-write dry run**: accepts `--dry-run` before or after supported commands; validates runtime and backup integrity, resolves restore IDs, and previews planned backup/file/package/service/remote-node actions without creating even an operation lock.
 
 ### Changed
-- Bumped the installer version to 2.18.0.
+- Bumped the installer version to 2.18.1.
 - **Simplified PVE sensor setup**: replaces the manual `apt install lm-sensors && sensors-detect` prerequisite and sensor-filter follow-up with one informed opt-in. ProxMorph installs `lm-sensors` noninteractively, reuses existing readings, and only runs `sensors-detect --auto` when required; individual filtering remains available through `sensors configure`.
 - **Sensor package rollback**: backups now record optional `lm-sensors` state and ownership. Transaction rollback, restore, and uninstall reinstate or remove the package as needed while retaining a copy that existed before ProxMorph.
 - Inventory View now defaults to guest resources only; storage and connectivity remain available in their dedicated views or can be explicitly enabled in the modal.
@@ -30,6 +30,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Interactive menu actions now return to the main menu after success, cancellation, or failure instead of ending the installer; command-line subcommands remain one-shot.
 
 ### Fixed
+- **Complete appearance coverage for PVE detail views**: extends account-selected typography to the VM/CT navigation treelist, default ExtJS menu/button/form/title subclasses, tags, progress text, empty states, and floating layers. Menus, dropdowns, tooltips, navigation labels, headers, and empty states now resolve their base colors through each ProxMorph theme's semantic tokens while preserving theme-specific hover, selected, and accent states.
 - **Native context-menu regression**: appends tree actions through the existing Datacenter and node menu item configurations instead of overriding their initialization methods, restoring the original Proxmox right-click menus.
 - **Red tree-corner marker**: commits the presentation-only hostname label after switching icon views so ExtJS does not render its red unsaved-record indicator on the Datacenter row.
 - **Powered-off guest visibility control**: restores the compact modal's easily missed `Stopped guests` checkbox as an explicit full-width **Show powered-off VMs and containers** control while retaining the same account-saved preference and filtering behavior.

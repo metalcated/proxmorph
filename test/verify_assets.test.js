@@ -20,6 +20,9 @@ const cssFiles = walk(path.join(root, 'themes'), (file) => file.endsWith('.css')
 const jsFiles = walk(path.join(root, 'themes', 'patches'), (file) => file.endsWith('.js'));
 const releaseWorkflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'release.yml'), 'utf8');
 const preferencesApi = path.join(root, 'server', 'PVE', 'API2', 'ProxMorph.pm');
+const pveThemeFiles = fs
+    .readdirSync(path.join(root, 'themes'))
+    .filter((file) => /^theme-.*\.css$/.test(file));
 
 assert.ok(fs.existsSync(preferencesApi), 'authenticated preferences API source is present');
 assert.match(releaseWorkflow, /cp -r server release\//, 'release archives include server-side modules');
@@ -59,6 +62,45 @@ for (const file of cssFiles) {
         }
     }
     assert.equal(depth, 0, `${relative} has balanced braces`);
+}
+
+for (const file of pveThemeFiles) {
+    const source = fs.readFileSync(path.join(root, 'themes', file), 'utf8');
+    const usesGitHubTokens = source.includes('--gh-canvas-default:');
+    const requiredTokens = usesGitHubTokens
+        ? [
+              '--gh-canvas-default:',
+              '--gh-canvas-muted:',
+              '--gh-fg-default:',
+              '--gh-fg-muted:',
+              '--gh-border-default:',
+              '--gh-accent-fg:',
+          ]
+        : [
+              '--pm-bg-base:',
+              '--pm-bg-surface:',
+              '--pm-text:',
+              '--pm-text-dim:',
+              '--pm-border:',
+              '--pm-accent:',
+          ];
+    requiredTokens.forEach((token) => {
+        assert.ok(source.includes(token), `${file} defines the shared semantic token ${token}`);
+    });
+    [
+        '.x-treelist-item-text',
+        '.x-menu-item-text-default',
+        '.x-panel-header-title-default',
+        '.x-toolbar-text-default',
+        '.x-btn-default-toolbar-small',
+        '.x-btn-menu-active',
+        '.x-grid-item',
+        '.x-grid-item-selected',
+        '.x-menu-item-active',
+        '.x-treelist-item-selected',
+    ].forEach((selector) => {
+        assert.ok(source.includes(selector), `${file} styles ${selector}`);
+    });
 }
 
 for (const file of jsFiles) {
