@@ -182,7 +182,7 @@ Enable **Use icon view switcher** in that modal to replace the dropdown with fou
 | Storage | Native storage records grouped under their nodes |
 | Connectivity | Native SDN and network records, grouped under nodes when applicable |
 
-Hovering an icon shows its name, cluster/host label, and hierarchy. In icon mode, custom views label the root with the current PVE hostname; Proxmox continues to append the configured cluster name when available. The active view uses a compact underline while colors and typography continue to come from the selected ProxMorph theme.
+Hovering an icon shows its name, cluster/host label, and hierarchy. In icon mode, custom views label the root with the current PVE hostname; Proxmox continues to append the configured cluster name when available. Each shortcut is a separate transparent outlined button, with a stronger border and icon marking the active view instead of a color fill. Colors and typography continue to come from the selected ProxMorph theme.
 
 Expanded and collapsed branches are remembered independently for each of the four views while the PVE page remains open. Switching away and back restores that view's prior tree shape instead of resetting it. This short-lived navigation state stays in memory and is intentionally not written to browser storage or the account preference file; a page reload starts from Proxmox's normal tree defaults.
 

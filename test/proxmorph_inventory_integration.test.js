@@ -9,6 +9,7 @@ let settingsButton;
 let settingsWindow;
 let appliedView;
 let navigation;
+let navigationStyle;
 let rootText = 'Datacenter';
 const apiRequests = [];
 
@@ -195,6 +196,14 @@ global.Proxmox = {
 global.Ext = {
     ClassManager: { get: () => true },
     ComponentQuery: { query: () => [tree] },
+    util: {
+        CSS: {
+            createStyleSheet(css, id) {
+                navigationStyle = { css, id };
+            },
+        },
+    },
+    get: () => null,
     getCmp: () => selector,
     onReady: (handler) => handler(),
     defer: (handler) => handler(),
@@ -236,8 +245,24 @@ assert.equal(settingsButton.tooltip, 'Inventory visibility settings');
 assert.equal(navigation.itemId, 'proxmorphViewNavigation');
 assert.equal(navigation.hidden, true, 'icon navigation is opt-in');
 assert.equal(selector.hidden, false, 'native picker remains visible by default');
+assert.equal(navigationStyle.id, 'proxmorph-inventory-navigation-style');
+assert.match(
+    navigationStyle.css,
+    /\.pmx-view-nav-button\.x-btn\.x-btn-default-toolbar-small\.x-btn-pressed[^{]*\{[^}]*background-color: transparent !important;/s,
+    'active view button overrides theme fills with a transparent background',
+);
+assert.match(
+    navigationStyle.css,
+    /border: 1px solid rgba\(127, 127, 127, 0\.42\) !important;/,
+    'each view icon uses an outlined box',
+);
 
 const navigationItems = navigation.items;
+assert.deepEqual(
+    navigationItems.map((item) => item.margin),
+    ['0 4 0 0', '0 4 0 0', '0 4 0 0', '0'],
+    'outlined icon buttons have a consistent horizontal gap',
+);
 assert.deepEqual(
     navigationItems.map((item) => item.ariaLabel),
     ['Datacenter view', 'Inventory view', 'Storage view', 'Connectivity view'],

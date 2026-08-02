@@ -651,11 +651,26 @@
         }
         Ext.util.CSS.createStyleSheet(
             [
-                '.pmx-view-nav { border-bottom: 1px solid rgba(127, 127, 127, 0.35); }',
-                '.pmx-view-nav-button { border: 0 !important; border-bottom: 3px solid transparent !important; border-radius: 0 !important; }',
-                '.pmx-view-nav-button.x-btn-pressed { border-bottom-color: currentColor !important; }',
+                '.pmx-view-nav { border-bottom: 1px solid rgba(127, 127, 127, 0.35); padding-bottom: 4px; }',
+                '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small,',
+                '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-over,',
+                '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-focus,',
+                '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-pressed,',
+                '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-menu-active {',
+                '  background-color: transparent !important;',
+                '  background-image: none !important;',
+                '  border: 1px solid rgba(127, 127, 127, 0.42) !important;',
+                '  border-radius: 7px !important;',
+                '  box-shadow: none !important;',
+                '  padding: 0 !important;',
+                '}',
+                '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-over { border-color: rgba(160, 160, 160, 0.72) !important; }',
+                '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-pressed { border-color: rgba(190, 190, 190, 0.9) !important; box-shadow: inset 0 0 0 1px rgba(160, 160, 160, 0.18) !important; }',
+                '.x-keyboard-mode .pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-focus { box-shadow: 0 0 0 2px rgba(127, 127, 127, 0.35) !important; }',
+                '.pmx-view-nav-button .x-btn-wrap, .pmx-view-nav-button .x-btn-button { background-color: transparent !important; background-image: none !important; }',
                 '.pmx-view-nav-button .x-btn-inner { display: none; }',
-                '.pmx-view-nav-button .x-btn-icon-el { font-size: 18px; }',
+                '.pmx-view-nav-button .x-btn-icon-el { font-size: 18px; opacity: 0.72; }',
+                '.pmx-view-nav-button.x-btn-pressed .x-btn-icon-el { opacity: 1; }',
             ].join('\n'),
             'proxmorph-inventory-navigation-style',
         );
@@ -735,7 +750,7 @@
                 iconCls: 'fa fa-globe',
                 hierarchy: 'SDN and node networks',
             },
-        ].map(function (item) {
+        ].map(function (item, index, allItems) {
             return {
                 xtype: 'button',
                 itemId: 'proxmorphView-' + item.viewKey,
@@ -745,6 +760,7 @@
                 ariaLabel: item.label + ' view',
                 width: 42,
                 height: 34,
+                margin: index < allItems.length - 1 ? '0 4 0 0' : '0',
                 enableToggle: true,
                 toggleGroup: 'proxmorphInventoryViews',
                 allowDepress: false,
