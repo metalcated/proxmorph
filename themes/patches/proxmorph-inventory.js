@@ -13,7 +13,7 @@
  * protected API and the replicated Proxmox cluster filesystem. The selected
  * view itself continues to use Proxmox's native URL state.
  *
- * Version: 1.4.0
+ * Version: 1.4.1
  */
 (function () {
     'use strict';
@@ -22,7 +22,7 @@
     var VIEW_NAME = 'Inventory View';
     var STORAGE_VIEW_KEY = 'proxmorph-storage';
     var CONNECTIVITY_VIEW_KEY = 'proxmorph-connectivity';
-    var VERSION = '1.4.0';
+    var VERSION = '1.4.1';
     var PREFERENCES_URL = '/proxmorph/preferences';
     var MAX_INIT_ATTEMPTS = 40;
     var initAttempts = 0;
@@ -745,7 +745,6 @@
         }
         Ext.util.CSS.createStyleSheet(
             [
-                '.pmx-view-nav { border-bottom: 1px solid rgba(127, 127, 127, 0.35); padding-bottom: 4px; }',
                 '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small,',
                 '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-over,',
                 '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-focus,',
@@ -754,17 +753,14 @@
                 '  background-color: transparent !important;',
                 '  background-image: none !important;',
                 '  border: 1px solid var(--pm-border, var(--gh-border-default, rgba(127, 127, 127, 0.42))) !important;',
-                '  border-radius: 7px !important;',
                 '  box-shadow: none !important;',
-                '  padding: 0 !important;',
                 '}',
-                '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-over { border-color: var(--pm-border-strong, var(--gh-border-muted, rgba(160, 160, 160, 0.72))) !important; }',
-                '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-pressed { border-color: var(--pm-accent, var(--gh-accent-fg, var(--pwt-text-color, rgba(190, 190, 190, 0.9)))) !important; }',
+                '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-pressed { border-color: var(--pm-border, var(--gh-border-default, rgba(127, 127, 127, 0.42))) !important; }',
                 '.x-keyboard-mode .pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-focus { outline: 2px solid var(--pm-accent, var(--gh-accent-fg, var(--pwt-text-color, rgba(127, 127, 127, 0.7)))) !important; outline-offset: 1px; }',
-                '.pmx-view-nav-button .x-btn-wrap, .pmx-view-nav-button .x-btn-button { background-color: transparent !important; background-image: none !important; }',
-                '.pmx-view-nav-button .x-btn-inner { display: none; }',
-                '.pmx-view-nav-button .x-btn-icon-el { font-size: 18px; opacity: 0.72; }',
-                '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-pressed .x-btn-icon-el { color: var(--pm-accent, var(--gh-accent-fg, var(--pwt-text-color, inherit))) !important; opacity: 1; }',
+                '.pmx-view-nav-button .x-btn-wrap, .pmx-view-nav-button .x-btn-button { align-items: center !important; background-color: transparent !important; background-image: none !important; display: flex !important; height: 100% !important; justify-content: center !important; width: 100% !important; }',
+                '.pmx-view-nav-button .x-btn-inner { display: none !important; width: 0 !important; }',
+                '.pmx-view-nav-button .x-btn-icon-el { align-items: center !important; display: flex !important; font-size: 16px; height: 16px !important; justify-content: center !important; line-height: 16px !important; margin: 0 !important; position: static !important; transform: none !important; width: 16px !important; }',
+                '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-pressed .x-btn-icon-el { color: var(--pm-accent, var(--gh-accent-fg, var(--pwt-text-color, inherit))) !important; }',
                 '.proxmorph-inventory-settings .pmx-inventory-section { border-color: var(--pm-border, var(--gh-border-default, rgba(127, 127, 127, 0.35))) !important; }',
                 '.proxmorph-inventory-settings .pmx-inventory-section .x-fieldset-header-text { color: var(--pm-text, var(--gh-fg-default, var(--pwt-text-color, inherit))) !important; }',
                 '.proxmorph-inventory-settings .pmx-inventory-option { margin-bottom: 2px; }',
@@ -864,12 +860,12 @@
             return {
                 xtype: 'button',
                 itemId: 'proxmorphView-' + item.viewKey,
-                cls: 'pmx-view-nav-button',
-                iconCls: item.iconCls,
+                cls: 'x-btn-default-toolbar-small pmx-view-nav-button',
+                iconCls: item.iconCls + ' x-btn-icon-el-default-toolbar-small',
                 tooltip: navigationTooltip(item.label, item.hierarchy),
                 ariaLabel: item.label + ' view',
-                width: 42,
-                height: 34,
+                width: 34,
+                height: 28,
                 margin: index < allItems.length - 1 ? '0 4 0 0' : '0',
                 enableToggle: true,
                 toggleGroup: 'proxmorphInventoryViews',

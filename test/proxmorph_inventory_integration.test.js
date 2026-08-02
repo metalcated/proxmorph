@@ -268,9 +268,27 @@ assert.match(
 
 const navigationItems = navigation.items;
 assert.deepEqual(
+    navigationItems.map((item) => [item.width, item.height]),
+    [[34, 28], [34, 28], [34, 28], [34, 28]],
+    'view icons match the compact native toolbar-button dimensions',
+);
+assert.ok(
+    navigationItems.every(
+        (item) =>
+            item.cls.includes('x-btn-default-toolbar-small') &&
+            item.iconCls.includes('x-btn-icon-el-default-toolbar-small'),
+    ),
+    'view buttons use the same toolbar and inner-icon styling as the surrounding controls',
+);
+assert.deepEqual(
     navigationItems.map((item) => item.margin),
     ['0 4 0 0', '0 4 0 0', '0 4 0 0', '0'],
     'outlined icon buttons have a consistent horizontal gap',
+);
+assert.match(
+    navigationStyle.css,
+    /\.pmx-view-nav-button \.x-btn-icon-el \{[^}]*align-items: center !important;[^}]*justify-content: center !important;[^}]*margin: 0 !important;/s,
+    'view icons are explicitly centered without inherited icon offsets',
 );
 assert.deepEqual(
     navigationItems.map((item) => item.ariaLabel),
