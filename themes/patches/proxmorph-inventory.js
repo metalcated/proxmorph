@@ -13,7 +13,7 @@
  * protected API and the replicated Proxmox cluster filesystem. The selected
  * view itself continues to use Proxmox's native URL state.
  *
- * Version: 1.4.1
+ * Version: 1.5.0
  */
 (function () {
     'use strict';
@@ -22,13 +22,18 @@
     var VIEW_NAME = 'Inventory View';
     var STORAGE_VIEW_KEY = 'proxmorph-storage';
     var CONNECTIVITY_VIEW_KEY = 'proxmorph-connectivity';
-    var VERSION = '1.4.1';
+    var VNET_TYPE = 'proxmorph-vnet';
+    var VNETS_URL = '/cluster/sdn/vnets';
+    var VERSION = '1.5.0';
     var PREFERENCES_URL = '/proxmorph/preferences';
     var MAX_INIT_ATTEMPTS = 40;
     var initAttempts = 0;
     var initialized = false;
     var preferencesAvailable = false;
     var expansionStateByView = {};
+    var connectivityVnets = [];
+    var connectivityVnetsLoading = false;
+    var vnetRoutingAvailable = false;
 
     var defaults = {
         useIconNavigation: false,
@@ -215,6 +220,38 @@
         };
     }
 
+    function normalizeConnectivityVnets(records) {
+        return (Array.isArray(records) ? records : [])
+            .filter(function (record) {
+                return record && record.vnet && record.state !== 'deleted';
+            })
+            .map(function (record) {
+                var pending = record.pending && typeof record.pending === 'object' ? record.pending : {};
+                return {
+                    vnet: String(record.vnet),
+                    zone: record.zone || pending.zone || '',
+                    state: record.state || '',
+                };
+            })
+            .sort(function (left, right) {
+                return left.vnet.localeCompare(right.vnet);
+            });
+    }
+
+    function buildConnectivityVnetNode(record) {
+        return {
+            id: VNET_TYPE + '/' + record.vnet,
+            type: VNET_TYPE,
+            text: record.vnet,
+            vnet: record.vnet,
+            zone: record.zone || '',
+            state: record.state || '',
+            hastate: 'unmanaged',
+            iconCls: 'fa fa-network-wired x-fa-treepanel',
+            leaf: true,
+        };
+    }
+
     function buildConnectivityViewFilter() {
         return {
             id: CONNECTIVITY_VIEW_KEY,
@@ -222,7 +259,12 @@
             getFilterFn: function () {
                 return function (item) {
                     var type = item && item.data ? item.data.type : undefined;
-                    return type === 'node' || type === 'sdn' || type === 'network';
+                    return (
+                        type === 'node' ||
+                        type === 'sdn' ||
+                        type === 'network' ||
+                        type === VNET_TYPE
+                    );
                 };
             },
         };
@@ -236,6 +278,229 @@
             return buildConnectivityViewFilter();
         }
         return buildInventoryViewFilter();
+    }
+
+    function findDirectChild(root, id) {
+        if (!root) {
+            return null;
+        }
+        if (root.findChild) {
+            return root.findChild('id', id, false);
+        }
+        var children = root.childNodes || [];
+        for (var index = 0; index < children.length; index++) {
+            if (children[index].data && children[index].data.id === id) {
+                return children[index];
+            }
+        }
+        return null;
+    }
+
+    function syncConnectivityVnetNodes(viewSelector, resourceTree) {
+        if (
+            !vnetRoutingAvailable ||
+            viewSelector.getValue() !== CONNECTIVITY_VIEW_KEY ||
+            !resourceTree ||
+            !resourceTree.getStore
+        ) {
+            return;
+        }
+
+        var root = resourceTree.getStore().getRootNode();
+        if (!root) {
+            return;
+        }
+
+        var expected = {};
+        connectivityVnets.forEach(function (record) {
+            var data = buildConnectivityVnetNode(record);
+            expected[data.id] = true;
+            var existing = findDirectChild(root, data.id);
+            if (existing) {
+                if (existing.beginEdit) {
+                    existing.beginEdit();
+                }
+                Object.keys(data).forEach(function (key) {
+                    if (existing.set) {
+                        existing.set(key, data[key]);
+                    } else {
+                        existing.data[key] = data[key];
+                    }
+                });
+                if (existing.commit) {
+                    existing.commit();
+                }
+            } else if (root.appendChild) {
+                root.appendChild(data);
+            }
+        });
+
+        (root.childNodes || []).slice().forEach(function (child) {
+            if (
+                child.data &&
+                child.data.type === VNET_TYPE &&
+                !expected[child.data.id] &&
+                root.removeChild
+            ) {
+                root.removeChild(child, true);
+            }
+        });
+
+        if (root.sort && resourceTree.nodeSortFn) {
+            root.sort(resourceTree.nodeSortFn.bind(resourceTree), true);
+        }
+    }
+
+    function ensureVnetBrowserClass() {
+        if (
+            typeof Ext === 'undefined' ||
+            !Ext.ClassManager ||
+            !Ext.ClassManager.get ||
+            !Ext.define
+        ) {
+            return false;
+        }
+
+        if (Ext.ClassManager.get('ProxMorph.sdn.VnetBrowser')) {
+            return true;
+        }
+
+        var requiredClasses = [
+            'PVE.panel.Config',
+            'PVE.sdn.VnetEdit',
+            'PVE.sdn.SubnetView',
+            'PVE.sdn.VnetACLView',
+        ];
+        for (var index = 0; index < requiredClasses.length; index++) {
+            if (!Ext.ClassManager.get(requiredClasses[index])) {
+                return false;
+            }
+        }
+
+        Ext.define('ProxMorph.sdn.VnetBrowser', {
+            extend: 'PVE.panel.Config',
+            alias: 'widget.proxmorphVnetBrowser',
+
+            initComponent: function () {
+                var me = this;
+                var data = me.pveSelNode && me.pveSelNode.data ? me.pveSelNode.data : {};
+                var vnet = data.vnet || data.text;
+                var zone = data.zone;
+                var encodedVnet = encodeURIComponent(vnet);
+
+                me.title = 'VNet ' + vnet;
+                me.onlineHelp = 'pvesdn_config_vnet';
+                me.showSearch = false;
+                me.tbar = [
+                    {
+                        text: 'Edit',
+                        iconCls: 'fa fa-pencil',
+                        handler: function () {
+                            Ext.create('PVE.sdn.VnetEdit', {
+                                autoShow: true,
+                                vnet: vnet,
+                            });
+                        },
+                    },
+                ];
+                me.items = [
+                    {
+                        xtype: 'pveSDNSubnetView',
+                        itemId: 'subnets',
+                        title: 'Subnets',
+                        iconCls: 'fa fa-exchange',
+                        base_url: '/cluster/sdn/vnets/' + encodedVnet + '/subnets',
+                    },
+                ];
+                if (zone) {
+                    me.items.push({
+                        xtype: 'pveSDNVnetACLView',
+                        itemId: 'permissions',
+                        title: 'Permissions',
+                        iconCls: 'fa fa-key',
+                        path:
+                            '/sdn/zones/' +
+                            encodeURIComponent(zone) +
+                            '/' +
+                            encodedVnet,
+                    });
+                }
+
+                me.callParent();
+            },
+        });
+
+        return true;
+    }
+
+    function installVnetRouting(resourceTree) {
+        if (!ensureVnetBrowserClass()) {
+            return false;
+        }
+
+        var workspace = resourceTree.up ? resourceTree.up('pveStdWorkspace') : null;
+        if (!workspace || !workspace.setContent) {
+            return false;
+        }
+        if (workspace.__proxmorphVnetRouting) {
+            return true;
+        }
+
+        workspace.__proxmorphVnetRouting = workspace.setContent;
+        workspace.setContent = function (component) {
+            if (
+                component &&
+                component.pveSelNode &&
+                component.pveSelNode.data &&
+                component.pveSelNode.data.type === VNET_TYPE
+            ) {
+                component.xtype = 'proxmorphVnetBrowser';
+                component.showSearch = false;
+            }
+            return this.__proxmorphVnetRouting.call(this, component);
+        };
+        return true;
+    }
+
+    function loadConnectivityVnets(viewSelector, resourceTree) {
+        if (!vnetRoutingAvailable || connectivityVnetsLoading || !hasPreferencesAPI()) {
+            return;
+        }
+
+        connectivityVnetsLoading = true;
+        Proxmox.Utils.API2Request({
+            url: VNETS_URL,
+            method: 'GET',
+            params: { pending: 1 },
+            success: function (response) {
+                connectivityVnetsLoading = false;
+                connectivityVnets = normalizeConnectivityVnets(
+                    response && response.result ? response.result.data : [],
+                );
+                syncConnectivityVnetNodes(viewSelector, resourceTree);
+            },
+            failure: function (response) {
+                connectivityVnetsLoading = false;
+                if (window.console && console.warn) {
+                    console.warn(
+                        '[ProxMorph Inventory] VNets could not be loaded; Connections will show the native network records.',
+                        response && response.htmlStatus ? response.htmlStatus : '',
+                    );
+                }
+            },
+        });
+    }
+
+    function installConnectivityRefresh(viewSelector, resourceTree) {
+        var resourceStore =
+            typeof PVE !== 'undefined' && PVE.data ? PVE.data.ResourceStore : null;
+        if (!resourceStore || !resourceStore.on || resourceTree.__proxmorphVnetRefresh) {
+            return;
+        }
+        resourceTree.__proxmorphVnetRefresh = true;
+        resourceStore.on('load', function () {
+            syncConnectivityVnetNodes(viewSelector, resourceTree);
+        });
     }
 
     function getHierarchyLabel() {
@@ -727,6 +992,10 @@
             restoreExpansionState(resourceTree, viewSelector.getValue());
             labelIconViewRoot(viewSelector, resourceTree);
             updateNavigationSelection(viewSelector);
+            if (viewSelector.getValue() === CONNECTIVITY_VIEW_KEY) {
+                syncConnectivityVnetNodes(viewSelector, resourceTree);
+                loadConnectivityVnets(viewSelector, resourceTree);
+            }
         });
         viewSelector.on('beforeselect', function () {
             captureExpansionState(resourceTree, viewSelector.getValue());
@@ -820,7 +1089,7 @@
         );
         setButtonTooltip(
             getNavigationButton(navigation, CONNECTIVITY_VIEW_KEY),
-            navigationTooltip('Connectivity', 'SDN and node networks'),
+            navigationTooltip('Connectivity', 'zones, fabrics, VNets, and node networks'),
         );
     }
 
@@ -854,7 +1123,7 @@
                 viewKey: CONNECTIVITY_VIEW_KEY,
                 label: 'Connectivity',
                 iconCls: 'fa fa-globe',
-                hierarchy: 'SDN and node networks',
+                hierarchy: 'zones, fabrics, VNets, and node networks',
             },
         ].map(function (item, index, allItems) {
             return {
@@ -954,7 +1223,9 @@
             return;
         }
 
+        vnetRoutingAvailable = installVnetRouting(resourceTree);
         installView(viewSelector, resourceTree);
+        installConnectivityRefresh(viewSelector, resourceTree);
         initialized = true;
         loadPreferences(function () {
             installNavigation(viewSelector, resourceTree);
@@ -970,6 +1241,8 @@
         version: VERSION,
         compatible: false,
         buildViewFilter: buildViewFilter,
+        normalizeConnectivityVnets: normalizeConnectivityVnets,
+        buildConnectivityVnetNode: buildConnectivityVnetNode,
         getHierarchyLabel: getHierarchyLabel,
         getSettings: function () {
             return copySettings(settings);

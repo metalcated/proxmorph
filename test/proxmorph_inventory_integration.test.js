@@ -11,7 +11,17 @@ let appliedView;
 let navigation;
 let navigationStyle;
 let rootText = 'Datacenter';
+let routedContent;
 const apiRequests = [];
+const definedClasses = {};
+const availableClasses = new Set([
+    'PVE.form.ViewSelector',
+    'PVE.tree.ResourceTree',
+    'PVE.panel.Config',
+    'PVE.sdn.VnetEdit',
+    'PVE.sdn.SubnetView',
+    'PVE.sdn.VnetACLView',
+]);
 
 function makeNode(id, children = [], expanded = false, text = id) {
     const node = {
@@ -39,6 +49,29 @@ function makeNode(id, children = [], expanded = false, text = id) {
             if (id === 'root' && field === 'text') {
                 rootText = value;
             }
+        },
+        findChild(field, value, deep = false) {
+            for (const child of this.childNodes) {
+                if (child.data[field] === value) {
+                    return child;
+                }
+                if (deep) {
+                    const nested = child.findChild(field, value, true);
+                    if (nested) {
+                        return nested;
+                    }
+                }
+            }
+            return null;
+        },
+        appendChild(data) {
+            const child = makeNode(data.id, [], false, data.text);
+            child.data = { ...data };
+            this.childNodes.push(child);
+            return child;
+        },
+        removeChild(child) {
+            this.childNodes = this.childNodes.filter((candidate) => candidate !== child);
         },
     };
     return node;
@@ -138,6 +171,13 @@ const selector = {
     },
 };
 
+const workspace = {
+    setContent(component) {
+        routedContent = component;
+        return component;
+    },
+};
+
 const tree = {
     toggleCls() {},
     setViewFilter(view) {
@@ -155,6 +195,9 @@ const tree = {
         return {
             getRootNode: () => currentRoot,
         };
+    },
+    up(selector) {
+        return selector === 'pveStdWorkspace' ? workspace : null;
     },
 };
 
@@ -180,7 +223,13 @@ global.Proxmox = {
     Utils: {
         API2Request(options) {
             apiRequests.push(options);
-            if (options.method === 'GET') {
+            if (options.url === '/cluster/sdn/vnets') {
+                options.success({
+                    result: {
+                        data: [{ vnet: 'prod-vnet', zone: 'prod-zone', state: 'new' }],
+                    },
+                });
+            } else if (options.method === 'GET') {
                 options.success({
                     result: {
                         data: {
@@ -203,7 +252,11 @@ global.Proxmox = {
     },
 };
 global.Ext = {
-    ClassManager: { get: () => true },
+    ClassManager: { get: (name) => availableClasses.has(name) },
+    define(name, config) {
+        availableClasses.add(name);
+        definedClasses[name] = config;
+    },
     ComponentQuery: { query: () => [tree] },
     util: {
         CSS: {
@@ -242,6 +295,11 @@ require(path.join(__dirname, '..', 'themes', 'patches', 'proxmorph-inventory.js'
 
 assert.equal(global.window.ProxMorphInventory.compatible, true);
 assert.equal(global.window.ProxMorphInventory.preferencesAvailable(), true);
+assert.equal(
+    definedClasses['ProxMorph.sdn.VnetBrowser'].alias,
+    'widget.proxmorphVnetBrowser',
+    'the scoped VNet browser is registered with ExtJS',
+);
 assert.equal(apiRequests[0].method, 'GET');
 assert.equal(apiRequests[0].url, '/proxmorph/preferences');
 assert.deepEqual(records, [
@@ -297,6 +355,10 @@ assert.deepEqual(
 assert.match(
     navigationItems.find((item) => item.ariaLabel === 'Inventory view').tooltip,
     /node → resource pool → guest/,
+);
+assert.match(
+    navigationItems.find((item) => item.ariaLabel === 'Connectivity view').tooltip,
+    /zones, fabrics, VNets, and node networks/,
 );
 
 assert.equal(selector.getViewFilter().id, 'server', 'native view behavior remains intact');
@@ -382,7 +444,37 @@ navigationItems.find((item) => item.ariaLabel === 'Connectivity view').handler()
 assert.equal(selector.getValue(), 'proxmorph-connectivity');
 assert.equal(appliedView.id, 'proxmorph-connectivity');
 assert.equal(appliedView.getFilterFn()({ data: { type: 'network' } }), true);
+assert.equal(appliedView.getFilterFn()({ data: { type: 'proxmorph-vnet' } }), true);
 assert.equal(appliedView.getFilterFn()({ data: { type: 'storage' } }), false);
+const vnetRequest = apiRequests.find((request) => request.url === '/cluster/sdn/vnets');
+assert.ok(vnetRequest, 'Connections loads the permission-filtered Proxmox VNet endpoint');
+assert.equal(vnetRequest.method, 'GET');
+assert.equal(vnetRequest.params.pending, 1);
+const vnetNode = findNode(currentRoot, 'proxmorph-vnet/prod-vnet');
+assert.ok(vnetNode, 'the Connections tree receives the VNet record');
+assert.equal(vnetNode.data.zone, 'prod-zone');
+assert.equal(vnetNode.data.iconCls, 'fa fa-network-wired x-fa-treepanel');
+
+workspace.setContent({ xtype: 'pvePanelConfig', pveSelNode: vnetNode });
+assert.equal(
+    routedContent.xtype,
+    'proxmorphVnetBrowser',
+    'selecting a VNet routes to its scoped Proxmox browser',
+);
+assert.equal(routedContent.showSearch, false);
+const vnetBrowser = {
+    pveSelNode: vnetNode,
+    callParent() {
+        this.parentCalled = true;
+    },
+};
+definedClasses['ProxMorph.sdn.VnetBrowser'].initComponent.call(vnetBrowser);
+assert.equal(vnetBrowser.parentCalled, true);
+assert.equal(vnetBrowser.showSearch, false);
+assert.equal(vnetBrowser.items[0].xtype, 'pveSDNSubnetView');
+assert.equal(vnetBrowser.items[0].base_url, '/cluster/sdn/vnets/prod-vnet/subnets');
+assert.equal(vnetBrowser.items[1].xtype, 'pveSDNVnetACLView');
+assert.equal(vnetBrowser.items[1].path, '/sdn/zones/prod-zone/prod-vnet');
 
 navigationItems.find((item) => item.ariaLabel === 'Datacenter view').handler();
 assert.equal(selector.getValue(), 'server');

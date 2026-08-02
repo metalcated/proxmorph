@@ -180,11 +180,13 @@ Enable **Use icon view switcher** in that modal to replace the dropdown with fou
 | Datacenter | Native Proxmox Server View with all node resources |
 | Inventory | Configurable node/pool/guest hierarchy |
 | Storage | Native storage records grouped under their nodes |
-| Connectivity | Native SDN and network records, grouped under nodes when applicable |
+| Connectivity | SDN zones, fabrics, vNets, and node networks visible to the signed-in account |
 
 Hovering an icon shows its name, cluster/host label, and hierarchy. In icon mode, custom views label the root with the current PVE hostname; Proxmox continues to append the configured cluster name when available. Each shortcut is a separate transparent outlined button, with a stronger border and icon marking the active view instead of a color fill. Colors and typography continue to come from the selected ProxMorph theme.
 
 Expanded and collapsed branches are remembered independently for each of the four views while the PVE page remains open. Switching away and back restores that view's prior tree shape instead of resetting it. This short-lived navigation state stays in memory and is intentionally not written to browser storage or the account preference file; a page reload starts from Proxmox's normal tree defaults.
+
+Connections loads vNets from Proxmox's authenticated `/cluster/sdn/vnets` endpoint because the native `/cluster/resources` feed does not include vNet configuration records. Proxmox applies the signed-in account's `SDN.Audit` or `SDN.Allocate` permissions before returning them. vNets are shown once at Datacenter level because they are cluster-wide SDN objects; selecting one opens its native Subnets and Permissions panels plus the native Edit action. If the vNet endpoint or required PVE UI components are unavailable, Connections safely falls back to the zones, fabrics, and node-network records already supplied by Proxmox.
 
 The selected view participates in Proxmox's native URL/history state. The modal's visibility, hierarchy, and icon-switcher choices are saved for the authenticated Proxmox username by `/api2/extjs/proxmorph/preferences`; no browser `localStorage` is used. PVE stores the small JSON preference map at `/etc/pve/priv/proxmorph-user-preferences.json`, so pmxcfs replicates it across cluster nodes. The API only reads or writes the current authenticated account's entry and does not alter `user.cfg` or add properties to Proxmox user objects. This account-level preference service is PVE-only; PDM inventory support remains a separate future implementation.
 

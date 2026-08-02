@@ -8,7 +8,7 @@ require(path.join(__dirname, '..', 'themes', 'patches', 'proxmorph-inventory.js'
 
 const inventory = global.window.ProxMorphInventory;
 assert.ok(inventory, 'inventory API is exposed');
-assert.equal(inventory.version, '1.4.1');
+assert.equal(inventory.version, '1.5.0');
 assert.equal(inventory.compatible, false, 'headless test does not claim an ExtJS match');
 
 let view = inventory.buildViewFilter();
@@ -70,7 +70,30 @@ assert.deepEqual(connectivityView.groups, ['node']);
 assert.equal(connectivityVisible({ data: { type: 'node' } }), true);
 assert.equal(connectivityVisible({ data: { type: 'sdn' } }), true);
 assert.equal(connectivityVisible({ data: { type: 'network' } }), true);
+assert.equal(connectivityVisible({ data: { type: 'proxmorph-vnet' } }), true);
 assert.equal(connectivityVisible({ data: { type: 'storage' } }), false);
+
+const normalizedVnets = inventory.normalizeConnectivityVnets([
+    { vnet: 'voice', pending: { zone: 'edge' }, state: 'new' },
+    { vnet: 'archive', zone: 'storage' },
+    { vnet: 'retired', zone: 'legacy', state: 'deleted' },
+    null,
+]);
+assert.deepEqual(normalizedVnets, [
+    { vnet: 'archive', zone: 'storage', state: '' },
+    { vnet: 'voice', zone: 'edge', state: 'new' },
+]);
+assert.deepEqual(inventory.buildConnectivityVnetNode(normalizedVnets[0]), {
+    id: 'proxmorph-vnet/archive',
+    type: 'proxmorph-vnet',
+    text: 'archive',
+    vnet: 'archive',
+    zone: 'storage',
+    state: '',
+    hastate: 'unmanaged',
+    iconCls: 'fa fa-network-wired x-fa-treepanel',
+    leaf: true,
+});
 
 assert.deepEqual(inventory.resetSettings(), {
     useIconNavigation: false,

@@ -15,7 +15,7 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Configuration
-VERSION="2.14.2"
+VERSION="2.15.0"
 TARGET_VERSION="$VERSION"
 WIDGET_TOOLKIT_DIR="/usr/share/javascript/proxmox-widget-toolkit"
 THEMES_DIR="${WIDGET_TOOLKIT_DIR}/themes"
@@ -267,7 +267,7 @@ validate_runtime_contracts() {
             errors=$((errors + 1))
         else
             local pve_ui_contract
-            for pve_ui_contract in 'PVE.form.ViewSelector' 'PVE.tree.ResourceTree' 'PVE.node.StatusView'; do
+            for pve_ui_contract in 'PVE.form.ViewSelector' 'PVE.tree.ResourceTree' 'PVE.node.StatusView' 'PVE.panel.Config' 'PVE.sdn.VnetEdit' 'PVE.sdn.SubnetView' 'PVE.sdn.VnetACLView'; do
                 if ! grep -qF "$pve_ui_contract" "$PVE_MANAGER_JS"; then
                     print_error "Required PVE UI extension point not found: ${pve_ui_contract}"
                     errors=$((errors + 1))
@@ -2269,7 +2269,7 @@ if [ "\$needs_repatch" = "true" ]; then
         if [ ! -f "\$PVE_MANAGER_JS" ]; then
             compatibility_error="missing PVE manager JavaScript bundle: \$PVE_MANAGER_JS"
         else
-            for pve_ui_contract in 'PVE.form.ViewSelector' 'PVE.tree.ResourceTree' 'PVE.node.StatusView'; do
+            for pve_ui_contract in 'PVE.form.ViewSelector' 'PVE.tree.ResourceTree' 'PVE.node.StatusView' 'PVE.panel.Config' 'PVE.sdn.VnetEdit' 'PVE.sdn.SubnetView' 'PVE.sdn.VnetACLView'; do
                 if ! grep -qF "\$pve_ui_contract" "\$PVE_MANAGER_JS"; then
                     compatibility_error="missing PVE UI extension point: \$pve_ui_contract"
                     break
