@@ -17,6 +17,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Changed
 - Bumped the installer version to 2.11.0.
 - The APT update hook now snapshots newly installed package files before re-patching and restores them automatically if re-patching fails.
+- Interactive menu actions now return to the main menu after success, cancellation, or failure instead of ending the installer; command-line subcommands remain one-shot.
 
 ### Fixed
 - **PDM Catppuccin Frappé and Macchiato**: restored the missing dark-mode semantic selector so their surface variables are valid CSS and apply on Proxmox Datacenter Manager.

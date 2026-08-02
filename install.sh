@@ -2896,15 +2896,15 @@ manage_sensors_menu() {
     echo "  4) Configure sensor selection"
     echo "  0) Back to main menu"
     echo ""
-    read -p "Enter choice [0-4]: " sensor_choice
+    read -r -p "Enter choice [0-4]: " sensor_choice
     
     case $sensor_choice in
         1) manage_sensors enable ;;
         2) manage_sensors disable ;;
         3) manage_sensors detect ;;
         4) manage_sensors configure ;;
-        0) show_menu ;;
-        *) print_error "Invalid option" ; manage_sensors_menu ;;
+        0) return 0 ;;
+        *) print_error "Invalid option" ;;
     esac
 }
 
@@ -3376,6 +3376,24 @@ show_status() {
     list_themes
 }
 
+# Run a menu action in its own shell so its normal error handling and
+# transactional ERR trap remain active. The parent menu can then recover from a
+# cancellation or failed action without weakening rollback behavior.
+run_menu_action() {
+    local action_status=0
+    set +e
+    (
+        set -Ee
+        "$@"
+    )
+    action_status=$?
+    set -e
+    if [[ "$action_status" -ne 0 ]]; then
+        print_warning "Action did not complete; returning to the main menu."
+    fi
+    return 0
+}
+
 # Main menu
 show_menu() {
     echo ""
@@ -3394,33 +3412,37 @@ show_menu() {
     echo " 12) Restore a backup"
     echo "  0) Exit"
     echo ""
-    read -p "Enter choice [0-12]: " choice
+    read -r -p "Enter choice [0-12]: " choice
 
     case $choice in
-        1) install_themes ;;
-        2) update_themes ;;
-        3) reinstall_themes ;;
-        4) uninstall_themes ;;
-        5) list_themes ;;
-        6) show_status ;;
-        7) manage_sensors_menu ;;
+        1) run_menu_action install_themes ;;
+        2) run_menu_action update_themes ;;
+        3) run_menu_action reinstall_themes ;;
+        4) run_menu_action uninstall_themes ;;
+        5) run_menu_action list_themes ;;
+        6) run_menu_action show_status ;;
+        7) run_menu_action manage_sensors_menu ;;
         8)
-            manage_default_theme
+            run_menu_action manage_default_theme
             echo ""
-            read -p "Enter theme key (or 'none' to clear, empty to cancel): " dt_key
-            [[ -n "$dt_key" ]] && manage_default_theme "$dt_key"
+            read -r -p "Enter theme key (or 'none' to clear, empty to cancel): " dt_key
+            if [[ -n "$dt_key" ]]; then
+                run_menu_action manage_default_theme "$dt_key"
+            fi
             ;;
-        9) validate_runtime_contracts ;;
-        10) create_backup "manual" "$(get_themes_source || true)" ;;
-        11) list_backups ;;
+        9) run_menu_action validate_runtime_contracts ;;
+        10) run_menu_action create_backup "manual" "$(get_themes_source || true)" ;;
+        11) run_menu_action list_backups ;;
         12)
-            list_backups
+            run_menu_action list_backups
             echo ""
             read -r -p "Enter backup ID (latest or baseline are also accepted): " restore_id
-            [[ -n "$restore_id" ]] && restore_backup "$restore_id"
+            if [[ -n "$restore_id" ]]; then
+                run_menu_action restore_backup "$restore_id"
+            fi
             ;;
         0) exit 0 ;;
-        *) print_error "Invalid option" ; show_menu ;;
+        *) print_error "Invalid option" ;;
     esac
 }
 
@@ -3439,7 +3461,11 @@ main() {
             filtered_args+=("$arg")
         fi
     done
-    set -- "${filtered_args[@]}"
+    if [[ ${#filtered_args[@]} -gt 0 ]]; then
+        set -- "${filtered_args[@]}"
+    else
+        set --
+    fi
 
     # Compatibility is read-only and should be usable by an unprivileged
     # administrator before deciding whether to install anything as root.
@@ -3506,7 +3532,9 @@ main() {
             manage_default_theme "${2:-}"
             ;;
         *)
-            show_menu
+            while true; do
+                show_menu
+            done
             ;;
     esac
 }

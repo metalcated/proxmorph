@@ -147,7 +147,7 @@ Checksum verification still runs, against your mirrored `SHA256SUMS`.
 | `./install.sh restore <id\|latest\|baseline>` | Restore a backup after confirmation |
 | `./install.sh restore <id> --yes` | Non-interactive restore; add `--force` only for a reviewed package-version mismatch |
 | `./install.sh <command> ... --dry-run` | Preview planned backup, file, package, service, and remote-node actions without changing anything |
-| `./install.sh` | Shows Menu to manage|
+| `./install.sh` | Open the persistent management menu; completed, cancelled, or failed actions return to the menu until Exit is selected |
 
 ## 🗂️ Inventory View (PVE)
 

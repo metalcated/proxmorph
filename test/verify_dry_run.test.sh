@@ -140,6 +140,27 @@ parser_preview=$(
 )
 check 'main accepts --dry-run before the command' "dispatch=restore ${backup_id} --force" "$parser_preview"
 
+menu_output=$(
+    check_root() { :; }
+    check_product() { :; }
+    acquire_operation_lock() { :; }
+    list_themes() { printf '%s\n' menu-list-ran; return 9; }
+    show_status() { printf '%s\n' menu-status-ran; }
+    DRY_RUN=false
+    main <<< $'5\n6\n0\n'
+)
+check 'menu mode runs the first selected action' yes "$(grep -qF 'menu-list-ran' <<< "$menu_output" && echo yes || echo no)"
+check 'menu mode returns after a failed action' yes "$(grep -qF 'menu-status-ran' <<< "$menu_output" && echo yes || echo no)"
+check 'menu mode reports an incomplete action' yes "$(grep -qF 'Action did not complete; returning to the main menu.' <<< "$menu_output" && echo yes || echo no)"
+check 'menu mode remains open until Exit is selected' 3 "$(grep -cF 'Select an option:' <<< "$menu_output")"
+
+rollback_probe() {
+    trap 'printf "%s\n" rollback-ran > "${work}/menu-rollback"; exit 17' ERR
+    false
+}
+run_menu_action rollback_probe >/dev/null
+check 'menu action isolation preserves ERR rollback handling' rollback-ran "$(cat "${work}/menu-rollback" 2>/dev/null)"
+
 # PDM has different live paths and injection rules; its install preview must
 # remain no-write as well.
 PRODUCT="PDM"
