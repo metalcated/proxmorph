@@ -8,7 +8,7 @@ Custom themes for Proxmox VE (PVE), Proxmox Backup Server (PBS), and Proxmox Dat
 - **Auto-Patch on Updates** - Automatically re-applies themes after product updates
 - **Hybrid Engine** - CSS for styling + JavaScript for dynamic chart patching
 - **Hardware Sensor Monitoring** - Optional CPU/storage temps, fan speeds, and UPS status on node Summary dashboard (PVE)
-- **Inventory View** - Optional node → resource pool → guest hierarchy with modal visibility controls (PVE)
+- **Inventory View** - Optional node/pool guest hierarchies and vCenter-style icon views with modal controls (PVE)
 - **Easy Installation** - Single command installation for PVE, PBS, and PDM
 
 ## 📸 Screenshot
@@ -151,18 +151,33 @@ Checksum verification still runs, against your mirrored `SHA256SUMS`.
 
 ## 🗂️ Inventory View (PVE)
 
-ProxMorph adds an optional **Inventory View** to the resource-tree selector. It keeps Proxmox's native records, permissions, navigation, and resource pools, while presenting guests as:
+ProxMorph adds an optional **Inventory View** to the resource-tree selector. It keeps Proxmox's native records, permissions, navigation, and resource pools. The modal can present guests in either hierarchy:
 
 ```text
 Datacenter
 └── Node
     └── Resource Pool
         └── VM or Container
+
+Datacenter
+└── Resource Pool
+    └── VM or Container
 ```
 
-Click the sitemap button next to the native Tree Settings gear to show or hide virtual machines, containers, templates, storage, SDN/network resources, stopped guests, and pool nesting. The same modal includes **Expand all** and **Collapse all** actions.
+Click the sitemap button next to the native Tree Settings gear to show or hide virtual machines, containers, templates, storage, SDN/network resources, stopped guests, node grouping, and pool grouping. The same modal includes **Expand all** and **Collapse all** actions.
 
-The visibility choices are intentionally scoped to the current page and are not written to browser storage. The hierarchy itself comes from the resource pools already configured in Proxmox; slash-delimited pools follow Proxmox's native **Nest Pools** tree setting.
+Enable **Use icon view switcher** in that modal to replace the dropdown with four vCenter-style view shortcuts:
+
+| Icon | Backing view |
+|------|--------------|
+| Datacenter | Native Proxmox Server View with all node resources |
+| Inventory | Configurable node/pool/guest hierarchy |
+| Storage | Native storage records grouped under their nodes |
+| Connectivity | Native SDN and network records, grouped under nodes when applicable |
+
+Hovering an icon shows its name, cluster/host label, and hierarchy. In icon mode, custom views label the root with the current PVE hostname; Proxmox continues to append the configured cluster name when available. The active view uses a compact underline while colors and typography continue to come from the selected ProxMorph theme.
+
+The selected view participates in Proxmox's native URL/history state. The modal's visibility, hierarchy, and icon-switcher choices are intentionally scoped to the current page and reset after a reload; they are not written to `localStorage`. Durable modal preferences require an authenticated server-side settings store, which is not part of this frontend-only patch. The hierarchy itself comes from the resource pools already configured in Proxmox; slash-delimited pools follow Proxmox's native **Nest Pools** tree setting. Pools remain Proxmox permission/resource groups—not vCenter VM folders.
 
 ## 🔍 What the installer changes on your system
 

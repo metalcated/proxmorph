@@ -124,11 +124,11 @@ parser_preview=$(
     dry_run_dispatch() { printf 'dispatch=%s\n' "$*"; }
     acquire_operation_lock() { printf '%s\n' lock-called > "$LOCK_FILE"; return 99; }
     DRY_RUN=false
-    main update 2.11.0 --dry-run
+    main update 2.12.0 --dry-run
 )
 parser_rc=$?
 check 'main accepts --dry-run after command arguments' 0 "$parser_rc"
-check 'main preserves non-dry-run positional arguments' 'dispatch=update 2.11.0' "$parser_preview"
+check 'main preserves non-dry-run positional arguments' 'dispatch=update 2.12.0' "$parser_preview"
 check 'main dry run exits before operation lock acquisition' no "$([[ -e "$LOCK_FILE" ]] && echo yes || echo no)"
 
 parser_preview=$(

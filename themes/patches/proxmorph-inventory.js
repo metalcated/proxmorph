@@ -9,22 +9,27 @@
  * Compatibility: Proxmox VE 8.x, 9.2.6+, and later releases that retain the
  * PVE.form.ViewSelector and PVE.tree.ResourceTree extension points.
  *
- * Preferences are intentionally held in memory for the current page. This
- * patch does not add browser-local persistence.
+ * Preferences are intentionally held in memory for the current page. The
+ * selected view uses Proxmox's native URL state, but modal preferences do not
+ * add browser-local persistence.
  *
- * Version: 1.0.0
+ * Version: 1.1.0
  */
 (function () {
     'use strict';
 
     var VIEW_KEY = 'proxmorph-inventory';
     var VIEW_NAME = 'Inventory View';
-    var VERSION = '1.0.0';
+    var STORAGE_VIEW_KEY = 'proxmorph-storage';
+    var CONNECTIVITY_VIEW_KEY = 'proxmorph-connectivity';
+    var VERSION = '1.1.0';
     var MAX_INIT_ATTEMPTS = 40;
     var initAttempts = 0;
     var initialized = false;
 
     var defaults = {
+        useIconNavigation: false,
+        groupByNode: true,
         showPools: true,
         showVirtualMachines: true,
         showContainers: true,
@@ -62,15 +67,18 @@
         var data = item && item.data ? item.data : {};
         var type = data.type;
 
-        // Nodes provide the navigable top level of this view and stay visible.
+        // Nodes are real navigable records. Hide them when the user chooses the
+        // vCenter-like Datacenter -> Pool -> Guest hierarchy.
         if (type === 'node') {
-            return true;
+            return settings.groupByNode;
         }
 
-        // Resource-pool records would duplicate the pool groups synthesized
-        // from each guest's native `pool` field.
+        // With node grouping, native pool records would appear once at the
+        // root and duplicate the per-node pool groups. In the vCenter-like
+        // pool-only hierarchy, keep the native pool record so its selection
+        // continues to route to Proxmox's real pool page.
         if (type === 'pool') {
-            return false;
+            return settings.showPools && !settings.groupByNode;
         }
 
         if (type === 'qemu' || type === 'lxc') {
@@ -94,16 +102,75 @@
         return false;
     }
 
-    function buildViewFilter() {
+    function getInventoryGroups() {
+        var groups = [];
+        if (settings.groupByNode) {
+            groups.push('node');
+        }
+        if (settings.showPools) {
+            groups.push('pool');
+        }
+        return groups;
+    }
+
+    function buildInventoryViewFilter() {
         return {
             id: VIEW_KEY,
-            // ResourceTree already understands both attributes. Using them in
-            // sequence yields Datacenter -> Node -> nested Pool -> Guest.
-            groups: settings.showPools ? ['node', 'pool'] : ['node'],
+            // ResourceTree understands both attributes. Pools stay native PVE
+            // resource/permission groups; only their presentation is folder-like.
+            groups: getInventoryGroups(),
             getFilterFn: function () {
                 return resourceIsVisible;
             },
         };
+    }
+
+    function buildStorageViewFilter() {
+        return {
+            id: STORAGE_VIEW_KEY,
+            groups: ['node'],
+            getFilterFn: function () {
+                return function (item) {
+                    var type = item && item.data ? item.data.type : undefined;
+                    return type === 'node' || type === 'storage';
+                };
+            },
+        };
+    }
+
+    function buildConnectivityViewFilter() {
+        return {
+            id: CONNECTIVITY_VIEW_KEY,
+            groups: ['node'],
+            getFilterFn: function () {
+                return function (item) {
+                    var type = item && item.data ? item.data.type : undefined;
+                    return type === 'node' || type === 'sdn' || type === 'network';
+                };
+            },
+        };
+    }
+
+    function buildViewFilter(viewKey) {
+        if (viewKey === STORAGE_VIEW_KEY) {
+            return buildStorageViewFilter();
+        }
+        if (viewKey === CONNECTIVITY_VIEW_KEY) {
+            return buildConnectivityViewFilter();
+        }
+        return buildInventoryViewFilter();
+    }
+
+    function getHierarchyLabel() {
+        var parts = ['Datacenter'];
+        if (settings.groupByNode) {
+            parts.push('node');
+        }
+        if (settings.showPools) {
+            parts.push('resource pool');
+        }
+        parts.push('guest');
+        return parts.join(' → ');
     }
 
     function getResourceTree() {
@@ -118,22 +185,104 @@
         }
     }
 
-    function selectInventoryView(viewSelector, resourceTree) {
-        var record = viewSelector.getStore().findRecord('key', VIEW_KEY, 0, false, true, true);
+    function labelIconViewRoot(viewSelector, resourceTree) {
+        var viewKey = viewSelector.getValue();
+        var isIconView =
+            viewKey === VIEW_KEY ||
+            viewKey === STORAGE_VIEW_KEY ||
+            viewKey === CONNECTIVITY_VIEW_KEY;
+        var hostname = window.location && window.location.hostname;
+        if (!settings.useIconNavigation || !isIconView || !hostname || !resourceTree.getStore) {
+            return;
+        }
+        var root = resourceTree.getStore().getRootNode();
+        if (!root) {
+            return;
+        }
+        if (root.set) {
+            root.set('text', hostname);
+        } else if (root.data) {
+            root.data.text = hostname;
+        }
+    }
+
+    function selectView(viewSelector, resourceTree, viewKey) {
+        var record = viewSelector.getStore().findRecord('key', viewKey, 0, false, true, true);
         if (!record) {
             return;
         }
-        viewSelector.setValue(VIEW_KEY);
+        viewSelector.setValue(viewKey);
         viewSelector.fireEvent('select', viewSelector, [record]);
         setInventoryMode(viewSelector, resourceTree);
+        labelIconViewRoot(viewSelector, resourceTree);
+        updateNavigationSelection(viewSelector);
     }
 
     function refreshInventoryView(viewSelector, resourceTree) {
         if (viewSelector.getValue() === VIEW_KEY) {
-            resourceTree.setViewFilter(buildViewFilter());
+            resourceTree.setViewFilter(buildInventoryViewFilter());
+            labelIconViewRoot(viewSelector, resourceTree);
         } else {
-            selectInventoryView(viewSelector, resourceTree);
+            selectView(viewSelector, resourceTree, VIEW_KEY);
         }
+    }
+
+    function getNavigation(viewSelector) {
+        var toolbar = viewSelector.ownerCt;
+        return toolbar && toolbar.down ? toolbar.down('#proxmorphViewNavigation') : null;
+    }
+
+    function getNavigationButton(navigation, viewKey) {
+        if (!navigation) {
+            return null;
+        }
+        if (navigation.down) {
+            return navigation.down('#proxmorphView-' + viewKey);
+        }
+        var items = navigation.items && navigation.items.items ? navigation.items.items : navigation.items || [];
+        for (var index = 0; index < items.length; index++) {
+            if (items[index].itemId === 'proxmorphView-' + viewKey) {
+                return items[index];
+            }
+        }
+        return null;
+    }
+
+    function updateNavigationSelection(viewSelector) {
+        var navigation = getNavigation(viewSelector);
+        var viewKey = viewSelector.getValue();
+        ['server', VIEW_KEY, STORAGE_VIEW_KEY, CONNECTIVITY_VIEW_KEY].forEach(function (key) {
+            var button = getNavigationButton(navigation, key);
+            if (!button) {
+                return;
+            }
+            var pressed = key === viewKey;
+            if (button.setPressed) {
+                button.setPressed(pressed);
+            } else if (button.toggle) {
+                button.toggle(pressed, true);
+            } else {
+                button.pressed = pressed;
+            }
+        });
+    }
+
+    function setComponentVisible(component, visible) {
+        if (!component) {
+            return;
+        }
+        if (component.setVisible) {
+            component.setVisible(visible);
+        } else {
+            component.hidden = !visible;
+        }
+    }
+
+    function syncNavigationMode(viewSelector) {
+        setComponentVisible(viewSelector, !settings.useIconNavigation);
+        setComponentVisible(getNavigation(viewSelector), settings.useIconNavigation);
+        updateNavigationTooltips(viewSelector);
+        updateNavigationSelection(viewSelector);
     }
 
     function createSettingsWindow(viewSelector, resourceTree) {
@@ -148,10 +297,21 @@
             },
             items: [
                 {
+                    name: 'useIconNavigation',
+                    fieldLabel: 'Use icon view switcher',
+                    boxLabel: 'Datacenter, Inventory, Storage, and Connectivity',
+                    checked: settings.useIconNavigation,
+                },
+                {
                     xtype: 'displayfield',
                     fieldLabel: 'Hierarchy',
-                    value: 'Datacenter → node → resource pool → guest',
+                    value: getHierarchyLabel(),
                     userCls: 'pmx-hint',
+                },
+                {
+                    name: 'groupByNode',
+                    fieldLabel: 'Group guests by node',
+                    checked: settings.groupByNode,
                 },
                 {
                     name: 'showPools',
@@ -232,14 +392,14 @@
                 {
                     text: 'Reset',
                     handler: function () {
-                        settings = copySettings(defaults);
-                        form.getForm().setValues(settings);
+                        form.getForm().setValues(copySettings(defaults));
                     },
                 },
                 {
                     text: 'Apply',
                     handler: function () {
                         updateSettings(form.getForm().getValues());
+                        syncNavigationMode(viewSelector);
                         refreshInventoryView(viewSelector, resourceTree);
                         win.close();
                     },
@@ -258,15 +418,26 @@
 
     function installView(viewSelector, resourceTree) {
         var store = viewSelector.getStore();
-        if (!store.findRecord('key', VIEW_KEY, 0, false, true, true)) {
-            store.add({ key: VIEW_KEY, value: VIEW_NAME });
-        }
+        [
+            { key: VIEW_KEY, value: VIEW_NAME },
+            { key: STORAGE_VIEW_KEY, value: 'Storage View' },
+            { key: CONNECTIVITY_VIEW_KEY, value: 'Connectivity View' },
+        ].forEach(function (view) {
+            if (!store.findRecord('key', view.key, 0, false, true, true)) {
+                store.add(view);
+            }
+        });
 
         if (!viewSelector.__proxmorphNativeGetViewFilter) {
             viewSelector.__proxmorphNativeGetViewFilter = viewSelector.getViewFilter;
             viewSelector.getViewFilter = function () {
-                if (this.getValue() === VIEW_KEY) {
-                    return buildViewFilter();
+                var viewKey = this.getValue();
+                if (
+                    viewKey === VIEW_KEY ||
+                    viewKey === STORAGE_VIEW_KEY ||
+                    viewKey === CONNECTIVITY_VIEW_KEY
+                ) {
+                    return buildViewFilter(viewKey);
                 }
                 return this.__proxmorphNativeGetViewFilter.call(this);
             };
@@ -274,7 +445,139 @@
 
         viewSelector.on('select', function () {
             setInventoryMode(viewSelector, resourceTree);
+            labelIconViewRoot(viewSelector, resourceTree);
+            updateNavigationSelection(viewSelector);
         });
+    }
+
+    function installNavigationStyles() {
+        if (
+            typeof Ext === 'undefined' ||
+            !Ext.util ||
+            !Ext.util.CSS ||
+            !Ext.util.CSS.createStyleSheet ||
+            (Ext.get && Ext.get('proxmorph-inventory-navigation-style'))
+        ) {
+            return;
+        }
+        Ext.util.CSS.createStyleSheet(
+            [
+                '.pmx-view-nav { border-bottom: 1px solid rgba(127, 127, 127, 0.35); }',
+                '.pmx-view-nav-button { border: 0 !important; border-bottom: 3px solid transparent !important; border-radius: 0 !important; }',
+                '.pmx-view-nav-button.x-btn-pressed { border-bottom-color: currentColor !important; }',
+                '.pmx-view-nav-button .x-btn-inner { display: none; }',
+                '.pmx-view-nav-button .x-btn-icon-el { font-size: 18px; }',
+            ].join('\n'),
+            'proxmorph-inventory-navigation-style',
+        );
+    }
+
+    function navigationTooltip(label, hierarchy) {
+        var cluster =
+            typeof PVE !== 'undefined' && PVE.ClusterName
+                ? PVE.ClusterName
+                : window.location && window.location.hostname
+                  ? window.location.hostname
+                  : 'Datacenter';
+        return label + ' — ' + cluster + (hierarchy ? ' → ' + hierarchy : '');
+    }
+
+    function setButtonTooltip(button, tooltip) {
+        if (!button) {
+            return;
+        }
+        if (button.setTooltip) {
+            button.setTooltip(tooltip);
+        } else {
+            button.tooltip = tooltip;
+        }
+    }
+
+    function updateNavigationTooltips(viewSelector) {
+        var navigation = getNavigation(viewSelector);
+        var inventoryHierarchy = getHierarchyLabel().replace(/^Datacenter → /, '');
+        setButtonTooltip(
+            getNavigationButton(navigation, 'server'),
+            navigationTooltip('Datacenter', 'nodes and resources'),
+        );
+        setButtonTooltip(
+            getNavigationButton(navigation, VIEW_KEY),
+            navigationTooltip('Inventory', inventoryHierarchy),
+        );
+        setButtonTooltip(
+            getNavigationButton(navigation, STORAGE_VIEW_KEY),
+            navigationTooltip('Storage', 'nodes → storage'),
+        );
+        setButtonTooltip(
+            getNavigationButton(navigation, CONNECTIVITY_VIEW_KEY),
+            navigationTooltip('Connectivity', 'SDN and node networks'),
+        );
+    }
+
+    function installNavigation(viewSelector, resourceTree) {
+        var toolbar = viewSelector.ownerCt;
+        if (!toolbar || toolbar.down('#proxmorphViewNavigation')) {
+            return;
+        }
+        installNavigationStyles();
+
+        var items = [
+            {
+                viewKey: 'server',
+                label: 'Datacenter',
+                iconCls: 'fa fa-server',
+                hierarchy: 'nodes and resources',
+            },
+            {
+                viewKey: VIEW_KEY,
+                label: 'Inventory',
+                iconCls: 'fa fa-sitemap',
+                hierarchy: 'nodes → pools → guests',
+            },
+            {
+                viewKey: STORAGE_VIEW_KEY,
+                label: 'Storage',
+                iconCls: 'fa fa-database',
+                hierarchy: 'nodes → storage',
+            },
+            {
+                viewKey: CONNECTIVITY_VIEW_KEY,
+                label: 'Connectivity',
+                iconCls: 'fa fa-globe',
+                hierarchy: 'SDN and node networks',
+            },
+        ].map(function (item) {
+            return {
+                xtype: 'button',
+                itemId: 'proxmorphView-' + item.viewKey,
+                cls: 'pmx-view-nav-button',
+                iconCls: item.iconCls,
+                tooltip: navigationTooltip(item.label, item.hierarchy),
+                ariaLabel: item.label + ' view',
+                width: 42,
+                height: 34,
+                enableToggle: true,
+                toggleGroup: 'proxmorphInventoryViews',
+                allowDepress: false,
+                pressed: viewSelector.getValue() === item.viewKey,
+                handler: function () {
+                    selectView(viewSelector, resourceTree, item.viewKey);
+                },
+            };
+        });
+
+        toolbar.add({
+            xtype: 'container',
+            itemId: 'proxmorphViewNavigation',
+            cls: 'pmx-view-nav',
+            hidden: !settings.useIconNavigation,
+            layout: {
+                type: 'hbox',
+                align: 'stretch',
+            },
+            items: items,
+        });
+        syncNavigationMode(viewSelector);
     }
 
     function installSettingsButton(viewSelector, resourceTree) {
@@ -295,6 +598,27 @@
                 createSettingsWindow(viewSelector, resourceTree);
             },
         });
+    }
+
+    function restoreCustomViewState(viewSelector) {
+        if (
+            !viewSelector.applyState ||
+            !Ext.state ||
+            !Ext.state.Manager ||
+            !Ext.state.Manager.getProvider
+        ) {
+            return;
+        }
+        var provider = Ext.state.Manager.getProvider();
+        var state = provider && provider.get ? provider.get('view') : null;
+        var viewKey = state && state.value;
+        if (
+            viewKey === VIEW_KEY ||
+            viewKey === STORAGE_VIEW_KEY ||
+            viewKey === CONNECTIVITY_VIEW_KEY
+        ) {
+            viewSelector.applyState(state, true);
+        }
     }
 
     function initialize() {
@@ -320,7 +644,10 @@
         }
 
         installView(viewSelector, resourceTree);
+        installNavigation(viewSelector, resourceTree);
         installSettingsButton(viewSelector, resourceTree);
+        restoreCustomViewState(viewSelector);
+        syncNavigationMode(viewSelector);
         initialized = true;
         window.ProxMorphInventory.compatible = true;
         console.log('[ProxMorph] Inventory View initialized (v' + VERSION + ')');
@@ -330,6 +657,7 @@
         version: VERSION,
         compatible: false,
         buildViewFilter: buildViewFilter,
+        getHierarchyLabel: getHierarchyLabel,
         getSettings: function () {
             return copySettings(settings);
         },
