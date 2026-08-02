@@ -13,7 +13,7 @@
  * protected API and the replicated Proxmox cluster filesystem. The selected
  * view itself continues to use Proxmox's native URL state.
  *
- * Version: 1.3.0
+ * Version: 1.4.0
  */
 (function () {
     'use strict';
@@ -22,7 +22,7 @@
     var VIEW_NAME = 'Inventory View';
     var STORAGE_VIEW_KEY = 'proxmorph-storage';
     var CONNECTIVITY_VIEW_KEY = 'proxmorph-connectivity';
-    var VERSION = '1.3.0';
+    var VERSION = '1.4.0';
     var PREFERENCES_URL = '/proxmorph/preferences';
     var MAX_INIT_ATTEMPTS = 40;
     var initAttempts = 0;
@@ -445,77 +445,165 @@
     }
 
     function createSettingsWindow(viewSelector, resourceTree) {
+        var accountTitle = preferencesAvailable
+            ? 'Authenticated Proxmox user'
+            : 'Preference service unavailable';
+        var accountDescription = preferencesAvailable
+            ? 'Saved cluster-wide for the signed-in account.'
+            : 'Apply will retry saving these settings to the account.';
         var form = Ext.create('Ext.form.Panel', {
+            cls: 'proxmorph-inventory-settings',
             border: false,
-            bodyPadding: 14,
-            defaultType: 'checkboxfield',
-            defaults: {
-                labelWidth: 230,
-                inputValue: true,
-                uncheckedValue: false,
-            },
+            bodyPadding: 16,
+            autoScroll: true,
             items: [
                 {
-                    name: 'useIconNavigation',
-                    fieldLabel: 'Use icon view switcher',
-                    boxLabel: 'Datacenter, Inventory, Storage, and Connectivity',
-                    checked: settings.useIconNavigation,
+                    xtype: 'fieldset',
+                    title: 'Navigation',
+                    cls: 'pmx-inventory-section',
+                    margin: '0 0 12 0',
+                    items: [
+                        {
+                            xtype: 'checkboxfield',
+                            name: 'useIconNavigation',
+                            boxLabel: 'Use icon view switcher',
+                            inputValue: true,
+                            uncheckedValue: false,
+                            checked: settings.useIconNavigation,
+                            cls: 'pmx-inventory-option',
+                        },
+                        {
+                            xtype: 'component',
+                            cls: 'pmx-inventory-help',
+                            html: 'Replaces the dropdown with Datacenter, Inventory, Storage, and Connectivity shortcuts.',
+                        },
+                    ],
                 },
                 {
-                    xtype: 'displayfield',
-                    fieldLabel: 'Hierarchy',
-                    value: getHierarchyLabel(),
-                    userCls: 'pmx-hint',
+                    xtype: 'fieldset',
+                    title: 'Hierarchy',
+                    cls: 'pmx-inventory-section',
+                    margin: '0 0 12 0',
+                    items: [
+                        {
+                            xtype: 'component',
+                            itemId: 'proxmorphHierarchySummary',
+                            cls: 'pmx-inventory-summary',
+                            html:
+                                '<span class="pmx-inventory-summary-label">Active structure</span>' +
+                                '<strong class="pmx-inventory-summary-value">' +
+                                getHierarchyLabel() +
+                                '</strong>',
+                        },
+                        {
+                            xtype: 'checkboxfield',
+                            name: 'groupByNode',
+                            boxLabel: 'Show node level',
+                            inputValue: true,
+                            uncheckedValue: false,
+                            checked: settings.groupByNode,
+                            cls: 'pmx-inventory-option',
+                        },
+                        {
+                            xtype: 'component',
+                            cls: 'pmx-inventory-help',
+                            html: 'Groups pools and guests beneath their Proxmox node.',
+                        },
+                        {
+                            xtype: 'checkboxfield',
+                            name: 'showPools',
+                            boxLabel: 'Show resource-pool folders',
+                            inputValue: true,
+                            uncheckedValue: false,
+                            checked: settings.showPools,
+                            cls: 'pmx-inventory-option',
+                        },
+                        {
+                            xtype: 'component',
+                            cls: 'pmx-inventory-help pmx-inventory-help-last',
+                            html: 'Keeps guests organized inside their existing Proxmox pools.',
+                        },
+                    ],
                 },
                 {
-                    name: 'groupByNode',
-                    fieldLabel: 'Show node level in hierarchy',
-                    boxLabel: 'Datacenter → node → resource pool → guest',
-                    checked: settings.groupByNode,
+                    xtype: 'fieldset',
+                    title: 'Visible resources',
+                    cls: 'pmx-inventory-section',
+                    margin: '0 0 12 0',
+                    items: [
+                        {
+                            xtype: 'container',
+                            layout: 'column',
+                            defaults: {
+                                xtype: 'checkboxfield',
+                                columnWidth: 0.5,
+                                inputValue: true,
+                                uncheckedValue: false,
+                                cls: 'pmx-inventory-resource-option',
+                                margin: '0 0 8 0',
+                            },
+                            items: [
+                                {
+                                    name: 'showVirtualMachines',
+                                    boxLabel: 'Virtual machines',
+                                    checked: settings.showVirtualMachines,
+                                },
+                                {
+                                    name: 'showContainers',
+                                    boxLabel: 'Containers',
+                                    checked: settings.showContainers,
+                                },
+                                {
+                                    name: 'showTemplates',
+                                    boxLabel: 'Templates',
+                                    checked: settings.showTemplates,
+                                },
+                                {
+                                    name: 'showStoppedGuests',
+                                    boxLabel: 'Stopped guests',
+                                    checked: settings.showStoppedGuests,
+                                },
+                                {
+                                    name: 'showStorage',
+                                    boxLabel: 'Storage',
+                                    checked: settings.showStorage,
+                                },
+                                {
+                                    name: 'showNetwork',
+                                    boxLabel: 'SDN and network resources',
+                                    checked: settings.showNetwork,
+                                },
+                            ],
+                        },
+                        {
+                            xtype: 'component',
+                            cls: 'pmx-inventory-help pmx-inventory-help-last pmx-inventory-resource-help',
+                            html: 'Storage and Connectivity remain available in their dedicated views.',
+                        },
+                    ],
                 },
                 {
-                    name: 'showPools',
-                    fieldLabel: 'Show resource-pool folders',
-                    boxLabel: 'Keep guests organized inside their Proxmox pools',
-                    checked: settings.showPools,
-                },
-                {
-                    name: 'showVirtualMachines',
-                    fieldLabel: 'Show virtual machines',
-                    checked: settings.showVirtualMachines,
-                },
-                {
-                    name: 'showContainers',
-                    fieldLabel: 'Show containers',
-                    checked: settings.showContainers,
-                },
-                {
-                    name: 'showTemplates',
-                    fieldLabel: 'Show templates',
-                    checked: settings.showTemplates,
-                },
-                {
-                    name: 'showStorage',
-                    fieldLabel: 'Show storage',
-                    checked: settings.showStorage,
-                },
-                {
-                    name: 'showNetwork',
-                    fieldLabel: 'Show SDN and network resources',
-                    checked: settings.showNetwork,
-                },
-                {
-                    name: 'showStoppedGuests',
-                    fieldLabel: 'Show stopped guests',
-                    checked: settings.showStoppedGuests,
-                },
-                {
-                    xtype: 'displayfield',
-                    fieldLabel: 'Preference scope',
-                    value: preferencesAvailable
-                        ? 'Authenticated Proxmox user account (cluster-wide)'
-                        : 'Server unavailable; Apply will retry account saving',
-                    userCls: 'pmx-hint',
+                    xtype: 'fieldset',
+                    title: 'Account',
+                    cls: 'pmx-inventory-section pmx-inventory-account-section',
+                    margin: 0,
+                    items: [
+                        {
+                            xtype: 'component',
+                            itemId: 'proxmorphPreferenceScope',
+                            cls: 'pmx-inventory-account',
+                            html:
+                                '<span class="pmx-inventory-account-icon fa fa-user-circle-o" aria-hidden="true"></span>' +
+                                '<span class="pmx-inventory-account-copy">' +
+                                '<strong>' +
+                                accountTitle +
+                                '</strong>' +
+                                '<span>' +
+                                accountDescription +
+                                '</span>' +
+                                '</span>',
+                        },
+                    ],
                 },
             ],
         });
@@ -525,7 +613,9 @@
             iconCls: 'fa fa-sitemap',
             modal: true,
             resizable: false,
-            width: 520,
+            constrain: true,
+            width: 600,
+            maxHeight: window.innerHeight ? Math.max(360, window.innerHeight - 48) : 720,
             layout: 'fit',
             items: [form],
             dockedItems: [
@@ -554,6 +644,8 @@
             buttons: [
                 {
                     text: 'Reset',
+                    itemId: 'proxmorphInventoryReset',
+                    cls: 'pmx-inventory-secondary-action',
                     handler: function () {
                         form.getForm().setValues(copySettings(defaults));
                     },
@@ -591,6 +683,8 @@
                 },
                 {
                     text: 'Cancel',
+                    itemId: 'proxmorphInventoryCancel',
+                    cls: 'pmx-inventory-secondary-action',
                     handler: function () {
                         win.close();
                     },
@@ -659,18 +753,34 @@
                 '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-menu-active {',
                 '  background-color: transparent !important;',
                 '  background-image: none !important;',
-                '  border: 1px solid rgba(127, 127, 127, 0.42) !important;',
+                '  border: 1px solid var(--pm-border, var(--gh-border-default, rgba(127, 127, 127, 0.42))) !important;',
                 '  border-radius: 7px !important;',
                 '  box-shadow: none !important;',
                 '  padding: 0 !important;',
                 '}',
-                '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-over { border-color: rgba(160, 160, 160, 0.72) !important; }',
-                '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-pressed { border-color: rgba(190, 190, 190, 0.9) !important; box-shadow: inset 0 0 0 1px rgba(160, 160, 160, 0.18) !important; }',
-                '.x-keyboard-mode .pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-focus { box-shadow: 0 0 0 2px rgba(127, 127, 127, 0.35) !important; }',
+                '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-over { border-color: var(--pm-border-strong, var(--gh-border-muted, rgba(160, 160, 160, 0.72))) !important; }',
+                '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-pressed { border-color: var(--pm-accent, var(--gh-accent-fg, var(--pwt-text-color, rgba(190, 190, 190, 0.9)))) !important; }',
+                '.x-keyboard-mode .pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-focus { outline: 2px solid var(--pm-accent, var(--gh-accent-fg, var(--pwt-text-color, rgba(127, 127, 127, 0.7)))) !important; outline-offset: 1px; }',
                 '.pmx-view-nav-button .x-btn-wrap, .pmx-view-nav-button .x-btn-button { background-color: transparent !important; background-image: none !important; }',
                 '.pmx-view-nav-button .x-btn-inner { display: none; }',
                 '.pmx-view-nav-button .x-btn-icon-el { font-size: 18px; opacity: 0.72; }',
-                '.pmx-view-nav-button.x-btn-pressed .x-btn-icon-el { opacity: 1; }',
+                '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-pressed .x-btn-icon-el { color: var(--pm-accent, var(--gh-accent-fg, var(--pwt-text-color, inherit))) !important; opacity: 1; }',
+                '.proxmorph-inventory-settings .pmx-inventory-section { border-color: var(--pm-border, var(--gh-border-default, rgba(127, 127, 127, 0.35))) !important; }',
+                '.proxmorph-inventory-settings .pmx-inventory-section .x-fieldset-header-text { color: var(--pm-text, var(--gh-fg-default, var(--pwt-text-color, inherit))) !important; }',
+                '.proxmorph-inventory-settings .pmx-inventory-option { margin-bottom: 2px; }',
+                '.proxmorph-inventory-settings .pmx-inventory-help { margin: 0 0 12px 26px; color: var(--pm-text-dim, var(--gh-fg-muted, var(--pwt-text-color, inherit))); line-height: 1.35; }',
+                '.proxmorph-inventory-settings .pmx-inventory-help-last { margin-bottom: 0; }',
+                '.proxmorph-inventory-settings .pmx-inventory-summary, .proxmorph-inventory-settings .pmx-inventory-account { background-color: var(--pm-bg-surface, var(--gh-canvas-muted, var(--pwt-panel-background, transparent))) !important; border: 1px solid var(--pm-border, var(--gh-border-default, rgba(127, 127, 127, 0.35))); border-radius: var(--pm-radius-md, 6px) !important; }',
+                '.proxmorph-inventory-settings .pmx-inventory-summary { margin-bottom: 12px; padding: 10px 12px; }',
+                '.proxmorph-inventory-settings .pmx-inventory-summary-label { display: block; margin-bottom: 3px; color: var(--pm-text-dim, var(--gh-fg-muted, var(--pwt-text-color, inherit))); font-size: 11px; letter-spacing: 0.04em; text-transform: uppercase; }',
+                '.proxmorph-inventory-settings .pmx-inventory-summary-value { display: block; color: var(--pm-text, var(--gh-fg-default, var(--pwt-text-color, inherit))); font-weight: 600; line-height: 1.35; }',
+                '.proxmorph-inventory-settings .pmx-inventory-resource-help { margin-left: 0; }',
+                '.proxmorph-inventory-settings .pmx-inventory-account { display: flex; align-items: center; gap: 10px; padding: 10px 12px; }',
+                '.proxmorph-inventory-settings .pmx-inventory-account-icon { color: var(--pm-accent, var(--gh-accent-fg, var(--pwt-text-color, inherit))); font-size: 18px; }',
+                '.proxmorph-inventory-settings .pmx-inventory-account-copy { display: flex; flex-direction: column; gap: 2px; }',
+                '.proxmorph-inventory-settings .pmx-inventory-account-copy strong { color: var(--pm-text, var(--gh-fg-default, var(--pwt-text-color, inherit))); font-weight: 600; }',
+                '.proxmorph-inventory-settings .pmx-inventory-account-copy span { color: var(--pm-text-dim, var(--gh-fg-muted, var(--pwt-text-color, inherit))); }',
+                '.pmx-inventory-secondary-action.x-btn.x-btn-default-small, .pmx-inventory-secondary-action.x-btn.x-btn-default-small.x-btn-over, .pmx-inventory-secondary-action.x-btn.x-btn-default-small.x-btn-focus, .pmx-inventory-secondary-action.x-btn.x-btn-default-small.x-btn-pressed { background-color: transparent !important; background-image: none !important; border-color: var(--pm-border, var(--gh-border-default, rgba(127, 127, 127, 0.42))) !important; box-shadow: none !important; }',
             ].join('\n'),
             'proxmorph-inventory-navigation-style',
         );

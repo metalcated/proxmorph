@@ -13,12 +13,13 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **vCenter-style icon navigation**: optionally replaces the native view picker with Datacenter, Inventory, Storage, and Connectivity icons. Each icon is a separate transparent outlined button with an accessible name and hierarchy tooltip; the controls retain native Proxmox resource routing and use filtered native records rather than synthetic infrastructure objects.
 - **Authenticated Inventory View preferences**: saves modal settings per Proxmox username through a protected PVE API and a private pmxcfs JSON file, making the same hierarchy and visibility choices available from every cluster node without browser `localStorage`.
 - **Per-view tree expansion memory**: preserves expanded and collapsed resource-tree branches independently while switching among Datacenter, Inventory, Storage, and Connectivity views during the active PVE page session.
+- **Theme-native Inventory settings modal**: organizes navigation, hierarchy, visible resources, and account scope into compact sections; removes the warning-only `.pmx-hint` treatment and uses the selected theme's own surface, border, text, and accent tokens.
 - **Full transactional backup and restore**: creates timestamped, checksummed, per-product snapshots before every mutating operation; restores failed/interrupted operations automatically; adds `backup`, `list-backups`, and version-guarded `restore` commands; and preserves remote cluster sensor files before deployment.
 - **Baseline-driven full uninstall**: restores the clean pre-install snapshot when package versions match, retains an uninstall rollback snapshot, and safely reinstalls the current web packages when a same-version baseline is unavailable.
 - **No-write dry run**: accepts `--dry-run` before or after supported commands; validates runtime and backup integrity, resolves restore IDs, and previews planned backup/file/package/service/remote-node actions without creating even an operation lock.
 
 ### Changed
-- Bumped the installer version to 2.14.0.
+- Bumped the installer version to 2.14.1.
 - Inventory View now defaults to guest resources only; storage and connectivity remain available in their dedicated views or can be explicitly enabled in the modal.
 - The APT update hook now snapshots newly installed package files before re-patching and restores them automatically if re-patching fails.
 - Interactive menu actions now return to the main menu after success, cancellation, or failure instead of ending the installer; command-line subcommands remain one-shot.

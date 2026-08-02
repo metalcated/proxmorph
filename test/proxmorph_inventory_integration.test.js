@@ -71,6 +71,15 @@ function findNode(root, id) {
     return match;
 }
 
+function flattenConfigItems(items) {
+    const flattened = [];
+    (items || []).forEach((item) => {
+        flattened.push(item);
+        flattened.push(...flattenConfigItems(item.items));
+    });
+    return flattened;
+}
+
 let currentRoot = makeRoot('server');
 
 const store = {
@@ -253,8 +262,8 @@ assert.match(
 );
 assert.match(
     navigationStyle.css,
-    /border: 1px solid rgba\(127, 127, 127, 0\.42\) !important;/,
-    'each view icon uses an outlined box',
+    /border: 1px solid var\(--pm-border, var\(--gh-border-default, rgba\(127, 127, 127, 0\.42\)\)\) !important;/,
+    'each view icon uses a theme-native outlined box',
 );
 
 const navigationItems = navigation.items;
@@ -279,21 +288,39 @@ assert.equal(findNode(currentRoot, 'node/pve01').isExpanded(), true);
 
 settingsButton.handler();
 assert.equal(settingsWindow.config.modal, true, 'settings use an in-app modal');
+assert.equal(settingsWindow.config.width, 600, 'settings modal has room for compact columns');
+const settingsFormConfig = settingsWindow.config.items[0].config;
+const settingsItems = flattenConfigItems(settingsFormConfig.items);
 assert.ok(
-    settingsWindow.config.items[0].config.items.some((item) => item.name === 'useIconNavigation'),
+    settingsItems.some((item) => item.name === 'useIconNavigation'),
     'settings modal exposes the icon-switcher option',
 );
 assert.ok(
-    settingsWindow.config.items[0].config.items.some((item) => item.name === 'groupByNode'),
+    settingsItems.some((item) => item.name === 'groupByNode'),
     'settings modal exposes the hierarchy option',
 );
 assert.ok(
-    settingsWindow.config.items[0].config.items.some(
+    settingsItems.some(
         (item) =>
-            item.fieldLabel === 'Preference scope' &&
-            /Authenticated Proxmox user account/.test(item.value),
+            item.itemId === 'proxmorphPreferenceScope' &&
+            /Authenticated Proxmox user/.test(item.html),
     ),
     'settings modal identifies account-level persistence',
+);
+assert.deepEqual(
+    settingsFormConfig.items.map((item) => item.title),
+    ['Navigation', 'Hierarchy', 'Visible resources', 'Account'],
+    'settings are organized into compact task-focused sections',
+);
+assert.equal(
+    settingsItems.some((item) => item.userCls === 'pmx-hint' || item.cls === 'pmx-hint'),
+    false,
+    'informational settings never use Proxmox warning styling',
+);
+assert.match(
+    navigationStyle.css,
+    /background-color: var\(--pm-bg-surface, var\(--gh-canvas-muted, var\(--pwt-panel-background, transparent\)\)\) !important;/,
+    'modal surfaces inherit the active theme tokens',
 );
 
 const applyButton = settingsWindow.config.buttons.find((button) => button.text === 'Apply');
