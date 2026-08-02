@@ -23,7 +23,11 @@ PRODUCT="PVE"
 printf '%s\n' 'Proxmox.Utils = { theme_map: {' > "$PROXMOXLIB_JS"
 printf '%s\n' '<script src="/pve2/js/pvemanagerlib.js"></script>' '</head>' '</body>' > "$INDEX_TEMPLATE"
 printf '%s\n' '        my $dinfo = df('\''/'\'', 1);' > "$NODES_PM"
-printf '%s\n' "Ext.define('PVE.form.ViewSelector');" "Ext.define('PVE.tree.ResourceTree');" "Ext.define('PVE.node.StatusView');" "Ext.define('PVE.panel.Config');" "Ext.define('PVE.sdn.VnetEdit');" "Ext.define('PVE.sdn.SubnetView');" "Ext.define('PVE.sdn.VnetACLView');" > "$PVE_MANAGER_JS"
+printf '%s\n' "Ext.define('PVE.form.ViewSelector');" "Ext.define('PVE.tree.ResourceTree');" \
+    "Ext.define('PVE.node.StatusView');" "Ext.define('PVE.panel.Config');" \
+    "Ext.define('PVE.sdn.VnetEdit');" "Ext.define('PVE.sdn.SubnetView');" \
+    "Ext.define('PVE.sdn.VnetACLView');" "Ext.define('PVE.dc.CmdMenu');" \
+    "Ext.define('PVE.node.CmdMenu');" > "$PVE_MANAGER_JS"
 printf '%s\n' 'my $observed = {' '};' > "$PVE_CLUSTER_PM"
 printf '%s\n' 'package PVE::API2;' 'use base qw(PVE::RESTHandler);' '1;' > "$PVE_API2_PM"
 
@@ -55,15 +59,32 @@ validate_runtime_contracts >/dev/null 2>&1
 check 'ambiguous sensor insertion point fails closed' 1 "$?"
 
 printf '%s\n' 'my $dinfo = df('\''/'\'', 1);' > "$NODES_PM"
-printf '%s\n' "Ext.define('PVE.form.ViewSelector');" "Ext.define('PVE.node.StatusView');" "Ext.define('PVE.panel.Config');" "Ext.define('PVE.sdn.VnetEdit');" "Ext.define('PVE.sdn.SubnetView');" "Ext.define('PVE.sdn.VnetACLView');" > "$PVE_MANAGER_JS"
+printf '%s\n' "Ext.define('PVE.form.ViewSelector');" "Ext.define('PVE.node.StatusView');" \
+    "Ext.define('PVE.panel.Config');" "Ext.define('PVE.sdn.VnetEdit');" \
+    "Ext.define('PVE.sdn.SubnetView');" "Ext.define('PVE.sdn.VnetACLView');" \
+    "Ext.define('PVE.dc.CmdMenu');" "Ext.define('PVE.node.CmdMenu');" > "$PVE_MANAGER_JS"
 validate_runtime_contracts >/dev/null 2>&1
 check 'missing inventory extension point fails closed' 1 "$?"
 
-printf '%s\n' "Ext.define('PVE.form.ViewSelector');" "Ext.define('PVE.tree.ResourceTree');" "Ext.define('PVE.node.StatusView');" "Ext.define('PVE.panel.Config');" "Ext.define('PVE.sdn.VnetEdit');" "Ext.define('PVE.sdn.SubnetView');" > "$PVE_MANAGER_JS"
+printf '%s\n' "Ext.define('PVE.form.ViewSelector');" "Ext.define('PVE.tree.ResourceTree');" \
+    "Ext.define('PVE.node.StatusView');" "Ext.define('PVE.panel.Config');" \
+    "Ext.define('PVE.sdn.VnetEdit');" "Ext.define('PVE.sdn.SubnetView');" \
+    "Ext.define('PVE.dc.CmdMenu');" "Ext.define('PVE.node.CmdMenu');" > "$PVE_MANAGER_JS"
 validate_runtime_contracts >/dev/null 2>&1
 check 'missing VNet browser extension point fails closed' 1 "$?"
 
-printf '%s\n' "Ext.define('PVE.form.ViewSelector');" "Ext.define('PVE.tree.ResourceTree');" "Ext.define('PVE.node.StatusView');" "Ext.define('PVE.panel.Config');" "Ext.define('PVE.sdn.VnetEdit');" "Ext.define('PVE.sdn.SubnetView');" "Ext.define('PVE.sdn.VnetACLView');" > "$PVE_MANAGER_JS"
+printf '%s\n' "Ext.define('PVE.form.ViewSelector');" "Ext.define('PVE.tree.ResourceTree');" \
+    "Ext.define('PVE.node.StatusView');" "Ext.define('PVE.panel.Config');" \
+    "Ext.define('PVE.sdn.VnetEdit');" "Ext.define('PVE.sdn.SubnetView');" \
+    "Ext.define('PVE.sdn.VnetACLView');" "Ext.define('PVE.dc.CmdMenu');" > "$PVE_MANAGER_JS"
+validate_runtime_contracts >/dev/null 2>&1
+check 'missing tree context-menu extension point fails closed' 1 "$?"
+
+printf '%s\n' "Ext.define('PVE.form.ViewSelector');" "Ext.define('PVE.tree.ResourceTree');" \
+    "Ext.define('PVE.node.StatusView');" "Ext.define('PVE.panel.Config');" \
+    "Ext.define('PVE.sdn.VnetEdit');" "Ext.define('PVE.sdn.SubnetView');" \
+    "Ext.define('PVE.sdn.VnetACLView');" "Ext.define('PVE.dc.CmdMenu');" \
+    "Ext.define('PVE.node.CmdMenu');" > "$PVE_MANAGER_JS"
 printf '%s\n' 'my $observed = {' 'my $observed = {' > "$PVE_CLUSTER_PM"
 validate_runtime_contracts >/dev/null 2>&1
 check 'ambiguous cluster preference anchor fails closed' 1 "$?"

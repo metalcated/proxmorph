@@ -13,7 +13,7 @@
  * protected API and the replicated Proxmox cluster filesystem. The selected
  * view itself continues to use Proxmox's native URL state.
  *
- * Version: 1.5.1
+ * Version: 1.6.0
  */
 (function () {
     'use strict';
@@ -24,7 +24,7 @@
     var CONNECTIVITY_VIEW_KEY = 'proxmorph-connectivity';
     var VNET_TYPE = 'proxmorph-vnet';
     var VNETS_URL = '/cluster/sdn/vnets';
-    var VERSION = '1.5.1';
+    var VERSION = '1.6.0';
     var PREFERENCES_URL = '/proxmorph/preferences';
     var MAX_INIT_ATTEMPTS = 40;
     var initAttempts = 0;
@@ -34,6 +34,8 @@
     var connectivityVnets = [];
     var connectivityVnetsLoading = false;
     var vnetRoutingAvailable = false;
+    var treeContextResourceTree = null;
+    var treeContextViewSelector = null;
 
     var defaults = {
         useIconNavigation: false,
@@ -594,6 +596,108 @@
         if (root && root.expand) {
             root.expand(false);
         }
+    }
+
+    function updateExpansionMemory() {
+        if (treeContextResourceTree && treeContextViewSelector) {
+            captureExpansionState(
+                treeContextResourceTree,
+                treeContextViewSelector.getValue(),
+            );
+        }
+    }
+
+    function expandContextBranch(record) {
+        if (!record || !treeContextResourceTree) {
+            return;
+        }
+        if (record.isRoot && record.isRoot()) {
+            treeContextResourceTree.expandAll();
+        } else if (record.expand) {
+            record.expand(true);
+        }
+        updateExpansionMemory();
+    }
+
+    function collapseContextBranch(record) {
+        if (!record || !treeContextResourceTree) {
+            return;
+        }
+        if (record.isRoot && record.isRoot()) {
+            treeContextResourceTree.collapseAll();
+            if (record.expand) {
+                record.expand(false);
+            }
+        } else if (record.collapse) {
+            record.collapse(true);
+        }
+        updateExpansionMemory();
+    }
+
+    function appendTreeContextActions(menu) {
+        var record = menu && menu.pveSelNode;
+        if (!record || !isExpandableNode(record) || !menu.add) {
+            return;
+        }
+        var rootAction = record.isRoot && record.isRoot();
+        menu.add([
+            {
+                xtype: 'menuseparator',
+                itemId: 'proxmorphTreeExpansionSeparator',
+            },
+            {
+                text: rootAction ? 'Expand all' : 'Expand branch',
+                itemId: 'proxmorphExpandBranch',
+                iconCls: 'fa fa-fw fa-plus-square-o',
+                handler: function () {
+                    expandContextBranch(record);
+                },
+            },
+            {
+                text: rootAction ? 'Collapse all' : 'Collapse branch',
+                itemId: 'proxmorphCollapseBranch',
+                iconCls: 'fa fa-fw fa-minus-square-o',
+                handler: function () {
+                    collapseContextBranch(record);
+                },
+            },
+        ]);
+    }
+
+    function installTreeContextActions(viewSelector, resourceTree) {
+        if (
+            typeof Ext === 'undefined' ||
+            !Ext.ClassManager ||
+            !Ext.ClassManager.get ||
+            !Ext.define ||
+            !Ext.ClassManager.get('PVE.dc.CmdMenu') ||
+            !Ext.ClassManager.get('PVE.node.CmdMenu')
+        ) {
+            return false;
+        }
+
+        treeContextResourceTree = resourceTree;
+        treeContextViewSelector = viewSelector;
+
+        if (!Ext.ClassManager.get('ProxMorph.overrides.DatacenterCmdMenu')) {
+            Ext.define('ProxMorph.overrides.DatacenterCmdMenu', {
+                override: 'PVE.dc.CmdMenu',
+                initComponent: function () {
+                    this.callParent();
+                    appendTreeContextActions(this);
+                },
+            });
+        }
+        if (!Ext.ClassManager.get('ProxMorph.overrides.NodeCmdMenu')) {
+            Ext.define('ProxMorph.overrides.NodeCmdMenu', {
+                override: 'PVE.node.CmdMenu',
+                initComponent: function () {
+                    this.callParent();
+                    appendTreeContextActions(this);
+                },
+            });
+        }
+        return true;
     }
 
     function setInventoryMode(viewSelector, resourceTree) {
@@ -1237,6 +1341,7 @@
         vnetRoutingAvailable = installVnetRouting(resourceTree);
         installView(viewSelector, resourceTree);
         installConnectivityRefresh(viewSelector, resourceTree);
+        installTreeContextActions(viewSelector, resourceTree);
         initialized = true;
         loadPreferences(function () {
             installNavigation(viewSelector, resourceTree);
