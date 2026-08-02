@@ -15,7 +15,7 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Configuration
-VERSION="2.16.1"
+VERSION="2.17.0"
 TARGET_VERSION="$VERSION"
 WIDGET_TOOLKIT_DIR="/usr/share/javascript/proxmox-widget-toolkit"
 THEMES_DIR="${WIDGET_TOOLKIT_DIR}/themes"
@@ -33,6 +33,7 @@ LOCK_FILE="${PROXMORPH_LOCK_FILE:-/run/lock/proxmorph.lock}"
 # Sensor support paths
 SENSORS_CONFIG="${INSTALL_DIR}/.sensors-enabled"
 SENSORS_FILTER="${INSTALL_DIR}/.sensors-filter"
+SENSORS_PACKAGE_MARKER="${INSTALL_DIR}/.lm-sensors-installed-by-proxmorph"
 NODES_PM="/usr/share/perl5/PVE/API2/Nodes.pm"
 SENSORS_PATCH_MARKER="# ProxMorph Sensors"
 
@@ -493,6 +494,26 @@ capture_package_versions() {
     done < <(get_product_package_names)
 }
 
+package_is_installed() {
+    local package="$1"
+    local status=""
+    if command -v dpkg-query &>/dev/null; then
+        status=$(dpkg-query -W -f='${db:Status-Abbrev}' "$package" 2>/dev/null || true)
+    fi
+    [[ "$status" == ii* ]]
+}
+
+capture_optional_package_state() {
+    local output="$1"
+    : > "$output"
+    [[ "$PRODUCT" == "PVE" ]] || return 0
+    if package_is_installed lm-sensors; then
+        printf 'lm-sensors\tpresent\n' >> "$output"
+    else
+        printf 'lm-sensors\tabsent\n' >> "$output"
+    fi
+}
+
 write_backup_pointer() {
     local pointer="$1"
     local backup_id="$2"
@@ -590,7 +611,7 @@ regenerate_backup_checksums() {
     (
         cd "$backup_dir"
         : > "${checksum_file}.tmp"
-        for relative in metadata.env inventory.tsv package-versions.tsv remote-inventory.tsv; do
+        for relative in metadata.env inventory.tsv package-versions.tsv optional-packages.tsv remote-inventory.tsv; do
             [[ -f "$relative" ]] && sha256sum "$relative" >> "${checksum_file}.tmp"
         done
         while IFS= read -r -d '' relative; do
@@ -632,6 +653,7 @@ create_backup() {
         printf 'preexisting_install=%s\n' "$had_install"
     } > "${backup_dir}/metadata.env"
     capture_package_versions "${backup_dir}/package-versions.tsv"
+    capture_optional_package_state "${backup_dir}/optional-packages.tsv"
     : > "${backup_dir}/inventory.tsv"
 
     collect_backup_candidates "$themes_source"
@@ -876,6 +898,58 @@ restore_remote_inventory() {
     done < "${backup_dir}/remote-inventory.tsv"
 }
 
+install_debian_package() {
+    local package="$1"
+    command -v apt-get &>/dev/null || {
+        print_error "apt-get is required to install ${package}"
+        return 1
+    }
+    DEBIAN_FRONTEND=noninteractive apt-get -qq -o Dpkg::Use-Pty=0 install -y "$package"
+}
+
+remove_debian_package() {
+    local package="$1"
+    command -v apt-get &>/dev/null || {
+        print_error "apt-get is required to remove ${package}"
+        return 1
+    }
+    DEBIAN_FRONTEND=noninteractive apt-get -qq -o Dpkg::Use-Pty=0 remove -y "$package"
+}
+
+restore_optional_package_state() {
+    local backup_dir="$1"
+    local sensor_package_owned_before_restore="${2:-false}"
+    local package=""
+    local saved_state=""
+    [[ -f "${backup_dir}/optional-packages.tsv" ]] || return 0
+
+    while IFS=$'\t' read -r package saved_state; do
+        [[ -n "$package" ]] || continue
+        [[ "$package" == "lm-sensors" ]] || {
+            print_error "Backup contains an unexpected optional package: ${package}"
+            return 1
+        }
+        case "$saved_state" in
+            present)
+                if ! package_is_installed "$package"; then
+                    print_info "Restoring optional package: ${package}"
+                    install_debian_package "$package" || return 1
+                fi
+                ;;
+            absent)
+                if package_is_installed "$package" && [[ "$sensor_package_owned_before_restore" == "true" ]]; then
+                    print_info "Removing ProxMorph-installed optional package: ${package}"
+                    remove_debian_package "$package" || return 1
+                fi
+                ;;
+            *)
+                print_error "Backup contains an invalid optional-package state for ${package}: ${saved_state}"
+                return 1
+                ;;
+        esac
+    done < "${backup_dir}/optional-packages.tsv"
+}
+
 snapshot_remote_nodes_before_restore() {
     local backup_dir="$1"
     local node=""
@@ -897,6 +971,7 @@ restore_backup_internal() {
     local backup_id=""
     local backup_dir=""
     local backup_product=""
+    local sensor_package_owned_before_restore=false
 
     backup_id=$(resolve_backup_id "$requested") || {
         print_error "Backup not found for ${PRODUCT}: ${requested}"
@@ -917,11 +992,13 @@ restore_backup_internal() {
     fi
     confirm_destructive_action "Restore backup ${backup_id}? Current ProxMorph-managed files will be replaced" "$assume_yes" || return 1
 
+    [[ -f "$SENSORS_PACKAGE_MARKER" ]] && sensor_package_owned_before_restore=true
     if [[ "$TRANSACTION_ACTIVE" == "true" && "$TRANSACTION_BACKUP_ID" != "$backup_id" ]]; then
         snapshot_remote_nodes_before_restore "$backup_dir" || return 1
     fi
     restore_local_inventory "$backup_dir" || return 1
     restore_remote_inventory "$backup_dir" || return 1
+    restore_optional_package_state "$backup_dir" "$sensor_package_owned_before_restore" || return 1
     if command -v systemctl &>/dev/null && [[ -n "$PROXY_SERVICE" ]]; then
         restart_proxmorph_services false 2>/dev/null || true
     fi
@@ -1036,6 +1113,13 @@ preview_backup_plan() {
         [[ -n "$package" ]] || continue
         printf '  [record] %s=%s\n' "$package" "$(get_installed_package_version "$package")"
     done < <(get_product_package_names)
+    if [[ "$PRODUCT" == "PVE" ]]; then
+        if package_is_installed lm-sensors; then
+            printf '  [record optional] lm-sensors=present\n'
+        else
+            printf '  [record optional] lm-sensors=absent\n'
+        fi
+    fi
 
     collect_backup_candidates "$themes_source"
     print_info "Backup inventory:"
@@ -1109,6 +1193,8 @@ preview_install_operation() {
         printf '  [modify] %s (load JavaScript patches/default theme)\n' "$INDEX_TEMPLATE"
         if [[ "$PRODUCT" == "PVE" ]]; then
             printf '  [optional] %s (only if hardware sensors are enabled)\n' "$NODES_PM"
+            printf '  [optional package] lm-sensors (installed noninteractively only after consent)\n'
+            printf '  [optional hardware probe] sensors-detect --auto (only if readings are unavailable)\n'
             printf '  [modify] %s (register replicated preference file)\n' "$PVE_CLUSTER_PM"
             printf '  [modify] %s (register authenticated preferences API)\n' "$PVE_API2_PM"
             printf '  [copy] %s -> %s\n' "$PVE_PREFERENCES_SOURCE_RELATIVE" "$PVE_PROXMORPH_API_PM"
@@ -1163,6 +1249,22 @@ preview_inventory_actions() {
     fi
 }
 
+preview_optional_package_actions() {
+    local backup_dir="$1"
+    local package=""
+    local saved_state=""
+    [[ -f "${backup_dir}/optional-packages.tsv" ]] || return 0
+
+    while IFS=$'\t' read -r package saved_state; do
+        [[ "$package" == "lm-sensors" ]] || continue
+        if [[ "$saved_state" == "present" ]] && ! package_is_installed "$package"; then
+            printf '  [install optional package] %s\n' "$package"
+        elif [[ "$saved_state" == "absent" ]] && package_is_installed "$package" && [[ -f "$SENSORS_PACKAGE_MARKER" ]]; then
+            printf '  [remove ProxMorph-installed package] %s\n' "$package"
+        fi
+    done < "${backup_dir}/optional-packages.tsv"
+}
+
 preview_restore_operation() {
     local requested="${1:-latest}"
     shift || true
@@ -1209,6 +1311,7 @@ preview_restore_operation() {
     echo ""
     print_info "Planned restore actions:"
     preview_inventory_actions "$backup_dir" all
+    preview_optional_package_actions "$backup_dir"
     preview_service_restarts
 }
 
@@ -1242,6 +1345,9 @@ preview_uninstall_fallback_cleanup() {
         if [[ "$PRODUCT" == "PVE" ]]; then
             printf '  [modify] %s (remove sensor API block)\n' "$NODES_PM"
             printf '  [remove] %s\n' "$SENSORS_CONFIG" "$SENSORS_FILTER"
+            if [[ -f "$SENSORS_PACKAGE_MARKER" ]] && package_is_installed lm-sensors; then
+                printf '  [remove ProxMorph-installed package] lm-sensors\n'
+            fi
             printf '  [modify] %s (remove preferences file registration)\n' "$PVE_CLUSTER_PM"
             printf '  [modify] %s (remove preferences API registration)\n' "$PVE_API2_PM"
             printf '  [remove] %s\n' "$PVE_PROXMORPH_API_PM" "$PVE_PREFERENCES_FILE"
@@ -1293,6 +1399,7 @@ preview_uninstall_operation() {
         if [[ "$baseline_verified" == "true" ]] && verify_backup_package_versions "$baseline_dir"; then
             print_info "Would restore exact clean baseline: ${baseline_id}"
             preview_inventory_actions "$baseline_dir" all
+            preview_optional_package_actions "$baseline_dir"
             used_baseline=true
         else
             print_warning "The baseline cannot safely restore current package files; the fallback uninstall path would be used."
@@ -1367,8 +1474,16 @@ preview_sensor_operation() {
     print_dry_run_header "sensors ${action}"
     case "$action" in
         enable)
-            detect_sensors || return 1
             preview_backup_plan "sensors-enable" ""
+            if package_is_installed lm-sensors; then
+                printf '  [keep optional package] lm-sensors (already installed)\n'
+            else
+                printf '  [install optional package] lm-sensors\n'
+                printf '  [write ownership marker] %s\n' "$SENSORS_PACKAGE_MARKER"
+            fi
+            if ! detect_sensors >/dev/null 2>&1; then
+                printf '  [hardware probe] sensors-detect --auto (readings unavailable)\n'
+            fi
             printf '  [modify] %s (sensor API block)\n' "$NODES_PM"
             printf '  [write] %s\n' "$SENSORS_CONFIG"
             while IFS= read -r node; do
@@ -2595,7 +2710,7 @@ detect_sensors() {
 
     if ! command -v sensors &> /dev/null; then
         print_warning "lm-sensors is not installed"
-        print_info "Install with: apt install lm-sensors && sensors-detect"
+        print_info "Run '$0 sensors enable' to install and configure it automatically"
         return 1
     fi
 
@@ -2603,7 +2718,7 @@ detect_sensors() {
     sensor_output=$(sensors -j 2>/dev/null) || true
 
     if [[ -z "$sensor_output" ]]; then
-        print_warning "No sensor data available. Run 'sensors-detect' first."
+        print_warning "No sensor data is currently available"
         return 1
     fi
 
@@ -2630,6 +2745,50 @@ detect_sensors() {
     }
     echo ""
     return 0
+}
+
+install_sensor_package() {
+    if package_is_installed lm-sensors; then
+        command -v sensors &>/dev/null || {
+            print_error "lm-sensors is installed but the sensors command is unavailable"
+            print_info "Repair it with: apt-get install --reinstall lm-sensors"
+            return 1
+        }
+        return 0
+    fi
+
+    print_info "Installing lm-sensors noninteractively..."
+    mkdir -p "$INSTALL_DIR"
+    printf 'installed-by-proxmorph\n' > "$SENSORS_PACKAGE_MARKER"
+    install_debian_package lm-sensors || return 1
+    command -v sensors &>/dev/null || {
+        print_error "lm-sensors installed, but the sensors command is unavailable"
+        return 1
+    }
+    print_status "Installed lm-sensors"
+}
+
+setup_sensor_runtime() {
+    install_sensor_package || return 1
+    if detect_sensors; then
+        return 0
+    fi
+
+    command -v sensors-detect &>/dev/null || {
+        print_error "sensors-detect is unavailable after installing lm-sensors"
+        return 1
+    }
+    print_warning "No supported readings are available; automatic hardware detection is required."
+    print_warning "sensors-detect probes hardware and cannot be guaranteed safe on every system."
+    print_info "Running sensors-detect --auto because sensor setup was explicitly enabled..."
+    sensors-detect --auto || {
+        print_error "Automatic hardware sensor detection failed"
+        return 1
+    }
+    if ! detect_sensors; then
+        print_warning "Detection completed, but supported readings are still unavailable. A reboot may be required."
+        return 1
+    fi
 }
 
 # Enumerate individual sensors from sensors -j output for selection
@@ -3032,27 +3191,24 @@ install_sensors() {
         return 0
     fi
 
-    if ! detect_sensors; then
+    if check_sensors; then
+        print_info "Hardware sensor monitoring is already enabled"
         return 0
     fi
 
-    read -p "Enable hardware sensor monitoring in the dashboard? [y/N]: " sensor_choice
+    print_warning "If readings are unavailable, setup runs sensors-detect --auto, which performs hardware probes that cannot be guaranteed safe on every system."
+    read -r -p "Enable sensors and automatically install/configure lm-sensors if needed? [y/N]: " sensor_choice
     case "$sensor_choice" in
         [Yy]|[Yy][Ee][Ss])
+            if ! setup_sensor_runtime; then
+                print_warning "Sensor setup did not complete; ProxMorph installation will continue without enabling the dashboard sensor panel."
+                return 0
+            fi
             patch_nodes_pm
             mkdir -p "$INSTALL_DIR"
             echo "enabled" > "$SENSORS_CONFIG"
             print_status "Hardware sensor monitoring enabled!"
-            echo ""
-            read -p "Would you like to choose which sensors to display? [y/N]: " filter_choice
-            case "$filter_choice" in
-                [Yy]|[Yy][Ee][Ss])
-                    configure_sensor_filter
-                    ;;
-                *)
-                    print_info "Showing all sensors (can be configured later with: install.sh manage-sensors)"
-                    ;;
-            esac
+            print_info "Showing all sensors. Use '$0 sensors configure' later to choose individual readings."
             patch_cluster_sensors
             ;;
         *)
@@ -3075,6 +3231,16 @@ remove_sensors() {
     fi
 }
 
+remove_managed_sensor_package() {
+    [[ "$PRODUCT" == "PVE" && -f "$SENSORS_PACKAGE_MARKER" ]] || return 0
+    if package_is_installed lm-sensors; then
+        print_info "Removing lm-sensors because ProxMorph installed it"
+        remove_debian_package lm-sensors || return 1
+        print_status "Removed ProxMorph-installed lm-sensors package"
+    fi
+    rm -f "$SENSORS_PACKAGE_MARKER"
+}
+
 # Check if sensors are enabled
 check_sensors() {
     if [[ -f "$SENSORS_CONFIG" ]] && grep -q "$SENSORS_PATCH_MARKER" "$NODES_PM" 2>/dev/null; then
@@ -3094,11 +3260,11 @@ manage_sensors() {
                 print_error "Sensor support is only available for Proxmox VE"
                 return 1
             fi
-            detect_sensors || return 1
             if [[ "$TRANSACTION_ACTIVE" != "true" ]]; then
                 begin_transaction "sensors-enable"
                 owns_transaction=true
             fi
+            setup_sensor_runtime || return 1
             patch_nodes_pm
             mkdir -p "$INSTALL_DIR"
             echo "enabled" > "$SENSORS_CONFIG"
@@ -3538,6 +3704,7 @@ uninstall_themes() {
             remove_default_theme_injection
             if [[ "$PRODUCT" == "PVE" ]]; then
                 remove_sensors
+                remove_managed_sensor_package
                 remove_pve_preferences_api
             fi
         fi

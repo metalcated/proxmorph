@@ -146,8 +146,17 @@ Checksum verification still runs, against your mirrored `SHA256SUMS`.
 | `./install.sh list-backups` | List backups and identify the clean uninstall baseline |
 | `./install.sh restore <id\|latest\|baseline>` | Restore a backup after confirmation |
 | `./install.sh restore <id> --yes` | Non-interactive restore; add `--force` only for a reviewed package-version mismatch |
+| `./install.sh sensors enable` | Install/configure `lm-sensors` when needed and enable the PVE dashboard integration |
+| `./install.sh sensors detect` | Read and report currently available supported sensors without changing the host |
+| `./install.sh sensors configure` | Choose which detected readings appear after sensor support is enabled |
 | `./install.sh <command> ... --dry-run` | Preview planned backup, file, package, service, and remote-node actions without changing anything |
 | `./install.sh` | Open the persistent management menu; completed, cancelled, or failed actions return to the menu until Exit is selected |
+
+### Hardware sensor setup (PVE)
+
+The guided install now asks one informed sensor question. If accepted, ProxMorph installs `lm-sensors` noninteractively when it is missing, uses existing readings when they are already available, and runs `sensors-detect --auto` only when detection is still required. The automatic detector probes hardware and cannot be guaranteed safe on every system, so this remains an explicit opt-in rather than an unattended default. Sensor filtering no longer adds another installation question; all readings are shown initially and can be narrowed later with `./install.sh sensors configure`.
+
+On a cluster, the separate remote-node confirmation remains because it modifies other hosts. Each node still needs its own usable `lm-sensors` runtime; ProxMorph only deploys the version-matched API patch and selected filter to remote nodes.
 
 ## 🗂️ Inventory View (PVE)
 
@@ -202,7 +211,7 @@ Run as root, `install.sh` makes only these changes, all reversible with `./insta
 - **Compatibility preflight:** validates the installed package version, template insertion points, theme map, PVE UI loader, and sensor anchor before modifying package-owned files.
 - **PVE account preferences:** installs a protected API module, registers one pmxcfs preference file, and patches the PVE API root so Inventory View settings follow the authenticated account across cluster nodes.
 - **Persistence:** installs an APT hook at `/etc/apt/apt.conf.d/99proxmorph` that runs `/opt/proxmorph/post-update.sh` to back up the new package files and re-apply the patches after a Proxmox update. The hook re-patches from the local `/opt/proxmorph` copy only; it downloads nothing.
-- **Sensors (PVE, optional):** if you enable sensor display, edits `Nodes.pm` to expose `lm-sensors` data.
+- **Sensors (PVE, optional):** after one explicit opt-in, installs `lm-sensors` noninteractively if needed, runs automatic hardware detection only when readings remain unavailable, and edits `Nodes.pm` to expose the readings.
 
 ### Full backup, rollback, and uninstall
 
@@ -212,7 +221,7 @@ Before every install, update, reinstall, restore, uninstall, default-theme chang
 - Every destination theme file that may be overwritten, including whether it was originally absent.
 - ProxMorph JavaScript/theme directories, `/opt/proxmorph`, `/etc/proxmorph`, the PVE preferences API module and replicated per-user preference file, the APT hook, and the ProxMorph log.
 - Original remote `Nodes.pm` and sensor-filter state before optional cluster sensor deployment.
-- Product package versions, file state, preserved ownership/modes, and SHA-256 checksums.
+- Product package versions, optional `lm-sensors` presence/ownership state, file state, preserved ownership/modes, and SHA-256 checksums.
 
 If a mutating operation fails or is interrupted, the just-created snapshot is restored automatically. Manual restore also creates a pre-restore snapshot first. A normal restore refuses to overwrite package-owned files when the installed Proxmox package versions differ from the backup; `--force` is available for an explicitly reviewed exception.
 
@@ -228,7 +237,7 @@ Use `list-backups` to obtain a restore ID. Each row includes the ID, UTC creatio
 
 Add `--dry-run` anywhere on an `install`, `update`, `reinstall`, `backup`, `restore`, `uninstall`, `default-theme`, or mutating `sensors` command. The preview still performs read-only compatibility and backup-integrity checks, but it does not download a release, create a backup or lock file, write files, change packages, restart services, or contact remote cluster nodes. Run it as root so it can inspect the same protected files and backup inventory as the real operation.
 
-`uninstall` asks for confirmation, backs up the installed state, then restores the clean same-version baseline. If the baseline belongs to an older Proxmox package version, the installer uses the newest verified `apt-repatch` snapshot of the current clean package files when available; otherwise it reinstalls the currently selected Proxmox web packages. Pre-existing non-package files still come from the baseline, and stale package files are never restored implicitly. Backups are retained and never pruned automatically.
+`uninstall` asks for confirmation, backs up the installed state, then restores the clean same-version baseline. If ProxMorph installed `lm-sensors`, restoring or uninstalling to a snapshot where it was absent removes that package; a pre-existing user-installed copy is retained. If the baseline belongs to an older Proxmox package version, the installer uses the newest verified `apt-repatch` snapshot of the current clean package files when available; otherwise it reinstalls the currently selected Proxmox web packages. Pre-existing non-package files still come from the baseline, and stale package files are never restored implicitly. Backups are retained and never pruned automatically.
 
 This is a full backup of the installer's system footprint, not a backup of VMs, containers, or storage. On PVE, ProxMorph modifies only its own `/etc/pve/priv/proxmorph-user-preferences.json` data file; it does not modify guest configuration, `user.cfg`, storage configuration, or other Proxmox cluster settings.
 

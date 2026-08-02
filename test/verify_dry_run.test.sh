@@ -36,6 +36,7 @@ PDM_THEMES_DIR="${work}/unused/pdm-themes"
 PDM_JS_PATCHES_DIR="${work}/unused/pdm-js"
 SENSORS_CONFIG="${INSTALL_DIR}/.sensors-enabled"
 SENSORS_FILTER="${INSTALL_DIR}/.sensors-filter"
+SENSORS_PACKAGE_MARKER="${INSTALL_DIR}/.lm-sensors-installed-by-proxmorph"
 THEME_COOKIE="PVEThemeCookie"
 THEME_WEB_PATH="/pwt/themes"
 
@@ -115,6 +116,20 @@ check 'uninstall dry run succeeds' 0 "$uninstall_rc"
 check 'uninstall dry run leaves the filesystem byte-for-byte unchanged' "$before" "$after"
 check 'uninstall dry run identifies the clean baseline' yes "$(grep -qF "exact clean baseline: ${backup_id}" <<< "$uninstall_preview" && echo yes || echo no)"
 check 'uninstall dry run retains rollback backups' yes "$(grep -qF '[retain]' <<< "$uninstall_preview" && echo yes || echo no)"
+
+before=$(tree_snapshot)
+sensor_preview=$(
+    package_is_installed() { return 1; }
+    detect_sensors() { return 1; }
+    get_remote_nodes() { :; }
+    preview_sensor_operation enable
+)
+sensor_preview_rc=$?
+after=$(tree_snapshot)
+check 'sensor enable dry run succeeds before lm-sensors is installed' 0 "$sensor_preview_rc"
+check 'sensor enable dry run leaves the filesystem byte-for-byte unchanged' "$before" "$after"
+check 'sensor enable dry run previews lm-sensors installation' yes "$(grep -qF '[install optional package] lm-sensors' <<< "$sensor_preview" && echo yes || echo no)"
+check 'sensor enable dry run previews automatic detection' yes "$(grep -qF '[hardware probe] sensors-detect --auto' <<< "$sensor_preview" && echo yes || echo no)"
 
 saved_backup_root="$BACKUP_ROOT"
 BACKUP_ROOT="${work}/no-backups"
