@@ -17,7 +17,7 @@ function walk(directory, predicate) {
 }
 
 const cssFiles = walk(path.join(root, 'themes'), (file) => file.endsWith('.css'));
-const jsFiles = walk(path.join(root, 'themes', 'patches'), (file) => file.endsWith('.js'));
+const jsFiles = walk(path.join(root, 'themes'), (file) => file.endsWith('.js'));
 const releaseWorkflow = fs.readFileSync(path.join(root, '.github', 'workflows', 'release.yml'), 'utf8');
 const preferencesApi = path.join(root, 'server', 'PVE', 'API2', 'ProxMorph.pm');
 const pveThemeFiles = fs

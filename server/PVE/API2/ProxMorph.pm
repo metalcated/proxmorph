@@ -22,6 +22,8 @@ my @boolean_preference_keys = qw(
     showStorage
     showNetwork
     showStoppedGuests
+    noVncContextMenu
+    noVncClipboardShortcuts
 );
 my @choice_preference_keys = qw(uiFont uiTextSize);
 my %choice_preference_values = (
@@ -39,6 +41,8 @@ my $defaults = {
     showStorage => 0,
     showNetwork => 0,
     showStoppedGuests => 1,
+    noVncContextMenu => 1,
+    noVncClipboardShortcuts => 0,
     uiFont => 'default',
     uiTextSize => 'default',
 };
@@ -125,7 +129,7 @@ __PACKAGE__->register_method({
     name => 'get_preferences',
     path => 'preferences',
     method => 'GET',
-    description => 'Get inventory and appearance preferences for the authenticated Proxmox user.',
+    description => 'Get inventory, appearance, and console preferences for the authenticated Proxmox user.',
     permissions => { user => 'all' },
     protected => 1,
     parameters => {
@@ -146,7 +150,7 @@ __PACKAGE__->register_method({
     name => 'set_preferences',
     path => 'preferences',
     method => 'PUT',
-    description => 'Save inventory and appearance preferences for the authenticated Proxmox user.',
+    description => 'Save inventory, appearance, and console preferences for the authenticated Proxmox user.',
     permissions => { user => 'all' },
     protected => 1,
     parameters => {

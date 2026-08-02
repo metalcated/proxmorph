@@ -15,7 +15,7 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Configuration
-VERSION="2.18.1"
+VERSION="2.19.0"
 TARGET_VERSION="$VERSION"
 WIDGET_TOOLKIT_DIR="/usr/share/javascript/proxmox-widget-toolkit"
 THEMES_DIR="${WIDGET_TOOLKIT_DIR}/themes"
@@ -53,6 +53,11 @@ PVE_CLUSTER_PREFS_MARKER="# ProxMorph User Preferences BEGIN"
 PVE_CLUSTER_PREFS_MARKER_END="# ProxMorph User Preferences END"
 PVE_API_PREFS_MARKER="# ProxMorph Preferences API BEGIN"
 PVE_API_PREFS_MARKER_END="# ProxMorph Preferences API END"
+
+# Proxmox noVNC clipboard enhancement paths (PVE implementation)
+NOVNC_DIR="/usr/share/novnc-pve"
+NOVNC_INDEX_TPL="${NOVNC_DIR}/index.html.tpl"
+NOVNC_PROXMORPH_DIR="${NOVNC_DIR}/proxmorph"
 
 # PBS-specific paths
 PBS_MANAGER_DIR="/usr/share/javascript/proxmox-backup"
@@ -308,6 +313,27 @@ validate_runtime_contracts() {
                 errors=$((errors + 1))
             fi
         fi
+        if [[ ! -f "$NOVNC_INDEX_TPL" ]]; then
+            print_error "Proxmox noVNC template not found: ${NOVNC_INDEX_TPL}"
+            errors=$((errors + 1))
+        else
+            local novnc_app_anchor_count
+            local novnc_clipboard_anchor_count
+            novnc_app_anchor_count=$(grep -cF 'import UI from "/novnc/app.js' "$NOVNC_INDEX_TPL" 2>/dev/null || true)
+            novnc_clipboard_anchor_count=$(grep -cF 'id="noVNC_clipboard_button"' "$NOVNC_INDEX_TPL" 2>/dev/null || true)
+            if [[ "$novnc_app_anchor_count" -ne 1 ]]; then
+                print_error "Expected one noVNC application module anchor in ${NOVNC_INDEX_TPL}; found ${novnc_app_anchor_count}"
+                errors=$((errors + 1))
+            fi
+            if [[ "$novnc_clipboard_anchor_count" -ne 1 ]]; then
+                print_error "Expected one native noVNC clipboard control in ${NOVNC_INDEX_TPL}; found ${novnc_clipboard_anchor_count}"
+                errors=$((errors + 1))
+            fi
+            if ! grep -q '</head>' "$NOVNC_INDEX_TPL"; then
+                print_error "noVNC template has no </head> insertion point: ${NOVNC_INDEX_TPL}"
+                errors=$((errors + 1))
+            fi
+        fi
     fi
 
     if [[ "$errors" -ne 0 ]]; then
@@ -469,7 +495,7 @@ proxmorph_install_detected() {
 
 get_product_package_names() {
     case "$PRODUCT" in
-        PVE) printf '%s\n' pve-manager pve-cluster proxmox-widget-toolkit ;;
+        PVE) printf '%s\n' pve-manager pve-cluster proxmox-widget-toolkit novnc-pve ;;
         PBS) printf '%s\n' proxmox-backup-server proxmox-widget-toolkit ;;
         PDM) printf '%s\n' proxmox-datacenter-manager proxmox-datacenter-manager-ui ;;
     esac
@@ -559,6 +585,8 @@ collect_backup_candidates() {
         add_backup_candidate "$PVE_API2_PM"
         add_backup_candidate "$PVE_PROXMORPH_API_PM"
         add_backup_candidate "$PVE_PREFERENCES_FILE"
+        add_backup_candidate "$NOVNC_INDEX_TPL"
+        add_backup_candidate "$NOVNC_PROXMORPH_DIR"
     fi
 
     # Preserve every live theme file that the current or incoming release owns,
@@ -596,6 +624,7 @@ backup_path_is_allowed() {
         "$PVE_CLUSTER_PM"|"$PVE_API2_PM"|"$PVE_PROXMORPH_API_PM"|"$PVE_PREFERENCES_FILE")
             [[ "$PRODUCT" == "PVE" ]] && return 0
             ;;
+        "$NOVNC_INDEX_TPL"|"$NOVNC_PROXMORPH_DIR") [[ "$PRODUCT" == "PVE" ]] && return 0 ;;
         "$PDM_THEMES_DIR"|"$PDM_JS_PATCHES_DIR") [[ "$PRODUCT" == "PDM" ]] && return 0 ;;
         "$THEMES_DIR"/theme-*.css)
             [[ "$(dirname "$path")" == "$THEMES_DIR" ]] && return 0
@@ -814,7 +843,7 @@ restore_local_inventory() {
         }
         if [[ "$scope" == "nonpackage" ]]; then
             case "$path" in
-                "$INDEX_TEMPLATE"|"$PROXMOXLIB_JS"|"$NODES_PM"|"$PVE_CLUSTER_PM"|"$PVE_API2_PM") continue ;;
+                "$INDEX_TEMPLATE"|"$PROXMOXLIB_JS"|"$NODES_PM"|"$PVE_CLUSTER_PM"|"$PVE_API2_PM"|"$NOVNC_INDEX_TPL") continue ;;
             esac
             # On a cross-version uninstall, the currently installed package
             # wins if it has since claimed a formerly custom destination.
@@ -823,7 +852,7 @@ restore_local_inventory() {
             fi
         elif [[ "$scope" == "package" ]]; then
             case "$path" in
-                "$INDEX_TEMPLATE"|"$PROXMOXLIB_JS"|"$NODES_PM"|"$PVE_CLUSTER_PM"|"$PVE_API2_PM") ;;
+                "$INDEX_TEMPLATE"|"$PROXMOXLIB_JS"|"$NODES_PM"|"$PVE_CLUSTER_PM"|"$PVE_API2_PM"|"$NOVNC_INDEX_TPL") ;;
                 *) continue ;;
             esac
         fi
@@ -1192,13 +1221,20 @@ preview_install_operation() {
         printf '  [modify] %s (register theme keys)\n' "$PROXMOXLIB_JS"
         printf '  [modify] %s (load JavaScript patches/default theme)\n' "$INDEX_TEMPLATE"
         if [[ "$PRODUCT" == "PVE" ]]; then
+            if [[ -n "$themes_source" && -d "${themes_source}/novnc" ]]; then
+                for js_file in "${themes_source}/novnc"/*; do
+                    [[ -f "$js_file" ]] || continue
+                    printf '  [copy] %s -> %s/\n' "$js_file" "$NOVNC_PROXMORPH_DIR"
+                done
+            fi
+            printf '  [modify] %s (load native noVNC clipboard enhancement)\n' "$NOVNC_INDEX_TPL"
             printf '  [optional] %s (only if hardware sensors are enabled)\n' "$NODES_PM"
             printf '  [optional package] lm-sensors (installed noninteractively only after consent)\n'
             printf '  [optional hardware probe] sensors-detect --auto (only if readings are unavailable)\n'
             printf '  [modify] %s (register replicated preference file)\n' "$PVE_CLUSTER_PM"
             printf '  [modify] %s (register authenticated preferences API)\n' "$PVE_API2_PM"
             printf '  [copy] %s -> %s\n' "$PVE_PREFERENCES_SOURCE_RELATIVE" "$PVE_PROXMORPH_API_PM"
-            printf '  [on first Apply] %s (per-user Inventory and Appearance settings)\n' "$PVE_PREFERENCES_FILE"
+            printf '  [on first Apply] %s (per-user Inventory, Appearance, and Console settings)\n' "$PVE_PREFERENCES_FILE"
         fi
     fi
     printf '  [write] %s (release cache and installed-path ledger)\n' "$INSTALL_DIR"
@@ -1216,7 +1252,7 @@ preview_inventory_actions() {
         [[ -n "$path" ]] || continue
         if [[ "$scope" == "nonpackage" ]]; then
             case "$path" in
-                "$INDEX_TEMPLATE"|"$PROXMOXLIB_JS"|"$NODES_PM"|"$PVE_CLUSTER_PM"|"$PVE_API2_PM") continue ;;
+                "$INDEX_TEMPLATE"|"$PROXMOXLIB_JS"|"$NODES_PM"|"$PVE_CLUSTER_PM"|"$PVE_API2_PM"|"$NOVNC_INDEX_TPL") continue ;;
             esac
             if command -v dpkg &>/dev/null && dpkg -S "$path" &>/dev/null; then
                 printf '  [preserve current package] %s\n' "$path"
@@ -1224,7 +1260,7 @@ preview_inventory_actions() {
             fi
         elif [[ "$scope" == "package" ]]; then
             case "$path" in
-                "$INDEX_TEMPLATE"|"$PROXMOXLIB_JS"|"$NODES_PM"|"$PVE_CLUSTER_PM"|"$PVE_API2_PM") ;;
+                "$INDEX_TEMPLATE"|"$PROXMOXLIB_JS"|"$NODES_PM"|"$PVE_CLUSTER_PM"|"$PVE_API2_PM"|"$NOVNC_INDEX_TPL") ;;
                 *) continue ;;
             esac
         fi
@@ -1343,6 +1379,8 @@ preview_uninstall_fallback_cleanup() {
         printf '  [remove] %s\n' "$JS_PATCHES_DIR"
         printf '  [modify] %s (remove JavaScript/default-theme injection)\n' "$INDEX_TEMPLATE"
         if [[ "$PRODUCT" == "PVE" ]]; then
+            printf '  [modify] %s (remove noVNC clipboard loader)\n' "$NOVNC_INDEX_TPL"
+            printf '  [remove] %s\n' "$NOVNC_PROXMORPH_DIR"
             printf '  [modify] %s (remove sensor API block)\n' "$NODES_PM"
             printf '  [remove] %s\n' "$SENSORS_CONFIG" "$SENSORS_FILTER"
             if [[ -f "$SENSORS_PACKAGE_MARKER" ]] && package_is_installed lm-sensors; then
@@ -1656,7 +1694,7 @@ restore_packages() {
 restore_all_product_packages() {
     local packages=()
     case "$PRODUCT" in
-        PVE) packages=(pve-manager pve-cluster proxmox-widget-toolkit) ;;
+        PVE) packages=(pve-manager pve-cluster proxmox-widget-toolkit novnc-pve) ;;
         PBS) packages=(proxmox-backup-server proxmox-widget-toolkit) ;;
         PDM) packages=(proxmox-datacenter-manager-ui) ;;
     esac
@@ -1716,6 +1754,8 @@ patch_theme_map() {
 # JavaScript Patches Configuration (Dynamic markers)
 JS_PATCH_MARKER="<!-- ProxMorph JS Patches -->"
 JS_PATCH_MARKER_END="<!-- /ProxMorph JS Patches -->"
+NOVNC_PATCH_MARKER="<!-- ProxMorph noVNC Clipboard -->"
+NOVNC_PATCH_MARKER_END="<!-- /ProxMorph noVNC Clipboard -->"
 
 # Server-side default theme (issue #52)
 DEFAULT_THEME_FILE="${CONFIG_DIR}/default-theme"
@@ -1891,6 +1931,82 @@ remove_pve_preferences_api() {
     fi
     if path_exists "$PVE_PREFERENCES_FILE"; then
         remove_exact_path "$PVE_PREFERENCES_FILE"
+    fi
+}
+
+install_novnc_clipboard() {
+    [[ "$PRODUCT" == "PVE" ]] || return 0
+
+    local themes_source="${1:-}"
+    local novnc_source=""
+    local module_url=""
+    local temporary_block=""
+    local temporary_output=""
+
+    if [[ -z "$themes_source" ]]; then
+        themes_source=$(get_themes_source || true)
+    fi
+    novnc_source="${themes_source}/novnc"
+
+    if [[ ! -f "${novnc_source}/proxmorph-novnc.js" || ! -f "${novnc_source}/proxmorph-novnc.css" ]]; then
+        print_error "ProxMorph noVNC clipboard assets are missing from ${novnc_source}"
+        return 1
+    fi
+    if [[ ! -f "$NOVNC_INDEX_TPL" ]]; then
+        print_error "Proxmox noVNC template not found: ${NOVNC_INDEX_TPL}"
+        return 1
+    fi
+
+    module_url=$(sed -nE 's@.*import UI from "([^"]*/novnc/app\.js[^"]*)";.*@\1@p' "$NOVNC_INDEX_TPL" | head -1)
+    if [[ -z "$module_url" ]]; then
+        print_error "Could not resolve the native noVNC application module from ${NOVNC_INDEX_TPL}"
+        return 1
+    fi
+
+    mkdir -p "$NOVNC_PROXMORPH_DIR"
+    cp "${novnc_source}/proxmorph-novnc.js" "${NOVNC_PROXMORPH_DIR}/proxmorph-novnc.js"
+    cp "${novnc_source}/proxmorph-novnc.css" "${NOVNC_PROXMORPH_DIR}/proxmorph-novnc.css"
+    chmod 644 "${NOVNC_PROXMORPH_DIR}/proxmorph-novnc.js" "${NOVNC_PROXMORPH_DIR}/proxmorph-novnc.css"
+
+    remove_marker_block "$NOVNC_INDEX_TPL" "$NOVNC_PATCH_MARKER" "$NOVNC_PATCH_MARKER_END"
+    temporary_block=$(mktemp)
+    cat > "$temporary_block" << BLOCK
+${NOVNC_PATCH_MARKER}
+<link rel="stylesheet" href="/novnc/proxmorph/proxmorph-novnc.css?ver=${TARGET_VERSION}">
+<script type="module">
+import ProxMorphUI from "${module_url}";
+window.ProxMorphNoVNCUI = ProxMorphUI;
+import("/novnc/proxmorph/proxmorph-novnc.js?ver=${TARGET_VERSION}");
+</script>
+${NOVNC_PATCH_MARKER_END}
+BLOCK
+    temporary_output=$(mktemp)
+    awk -v blockfile="$temporary_block" \
+        'BEGIN { inserted = 0; while ((getline line < blockfile) > 0) block = block (block ? "\n" : "") line }
+         !inserted && /<\/head>/ { print block; inserted = 1 }
+         { print }
+         END { if (!inserted) exit 42 }' \
+        "$NOVNC_INDEX_TPL" > "$temporary_output" || {
+            rm -f "$temporary_block" "$temporary_output"
+            print_error "Could not inject the ProxMorph noVNC clipboard loader"
+            return 1
+        }
+    mv "$temporary_output" "$NOVNC_INDEX_TPL"
+    chmod 644 "$NOVNC_INDEX_TPL"
+    rm -f "$temporary_block"
+
+    record_installed_path "$NOVNC_PROXMORPH_DIR"
+    print_status "Enabled the native noVNC clipboard toolbar and Shift + right-click menu"
+}
+
+remove_novnc_clipboard() {
+    [[ "$PRODUCT" == "PVE" ]] || return 0
+
+    if [[ -f "$NOVNC_INDEX_TPL" ]]; then
+        remove_marker_block "$NOVNC_INDEX_TPL" "$NOVNC_PATCH_MARKER" "$NOVNC_PATCH_MARKER_END"
+    fi
+    if path_exists "$NOVNC_PROXMORPH_DIR"; then
+        remove_exact_path "$NOVNC_PROXMORPH_DIR"
     fi
 }
 
@@ -2286,6 +2402,9 @@ PVE_PROXMORPH_API_PM="${PVE_PROXMORPH_API_PM}"
 PVE_PREFERENCES_SOURCE_RELATIVE="${PVE_PREFERENCES_SOURCE_RELATIVE}"
 PVE_CLUSTER_PREFS_MARKER="${PVE_CLUSTER_PREFS_MARKER}"
 PVE_API_PREFS_MARKER="${PVE_API_PREFS_MARKER}"
+NOVNC_INDEX_TPL="${NOVNC_INDEX_TPL}"
+NOVNC_PROXMORPH_DIR="${NOVNC_PROXMORPH_DIR}"
+NOVNC_PATCH_MARKER="${NOVNC_PATCH_MARKER}"
 DEFAULT_THEME_FILE="${DEFAULT_THEME_FILE}"
 DEFAULT_THEME_MARKER="${DEFAULT_THEME_MARKER}"
 DEFAULT_THEME_MARKER_END="${DEFAULT_THEME_MARKER_END}"
@@ -2360,6 +2479,18 @@ if [ "\$PRODUCT" = "PVE" ]; then
     fi
 fi
 
+# novnc-pve updates replace its template and may replace the managed asset
+# directory. Compare both the loader marker and cached release assets.
+if [ "\$PRODUCT" = "PVE" ] && [ -d "\${THEMES_SOURCE}/novnc" ]; then
+    if ! grep -qF "\$NOVNC_PATCH_MARKER" "\$NOVNC_INDEX_TPL" 2>/dev/null || \
+       [ ! -f "\${NOVNC_PROXMORPH_DIR}/proxmorph-novnc.js" ] || \
+       [ ! -f "\${NOVNC_PROXMORPH_DIR}/proxmorph-novnc.css" ] || \
+       ! cmp -s "\${THEMES_SOURCE}/novnc/proxmorph-novnc.js" "\${NOVNC_PROXMORPH_DIR}/proxmorph-novnc.js" || \
+       ! cmp -s "\${THEMES_SOURCE}/novnc/proxmorph-novnc.css" "\${NOVNC_PROXMORPH_DIR}/proxmorph-novnc.css"; then
+        needs_repatch=true
+    fi
+fi
+
 if [ "\$needs_repatch" = "true" ]; then
     # Re-run the same capability checks after a package update. If Proxmox has
     # changed a patch point, leave the new package files untouched and log the
@@ -2390,6 +2521,22 @@ if [ "\$needs_repatch" = "true" ]; then
                     break
                 fi
             done
+        fi
+    fi
+
+    if [ -z "\$compatibility_error" ] && [ "\$PRODUCT" = "PVE" ]; then
+        if [ ! -f "\$NOVNC_INDEX_TPL" ]; then
+            compatibility_error="missing Proxmox noVNC template: \$NOVNC_INDEX_TPL"
+        else
+            novnc_app_anchor_count=\$(grep -cF 'import UI from "/novnc/app.js' "\$NOVNC_INDEX_TPL" 2>/dev/null || true)
+            novnc_clipboard_anchor_count=\$(grep -cF 'id="noVNC_clipboard_button"' "\$NOVNC_INDEX_TPL" 2>/dev/null || true)
+            if [ "\$novnc_app_anchor_count" -ne 1 ]; then
+                compatibility_error="expected one noVNC application module anchor, found \$novnc_app_anchor_count"
+            elif [ "\$novnc_clipboard_anchor_count" -ne 1 ]; then
+                compatibility_error="expected one native noVNC clipboard control, found \$novnc_clipboard_anchor_count"
+            elif ! grep -q '</head>' "\$NOVNC_INDEX_TPL" 2>/dev/null; then
+                compatibility_error="missing </head> insertion point in \$NOVNC_INDEX_TPL"
+            fi
         fi
     fi
 
@@ -2655,6 +2802,11 @@ DTBLOCK
                 PROXMORPH_BACKUP_ROOT="\$BACKUP_ROOT" \
                 "\${INSTALL_DIR}/install.sh" reapply-preferences-api >> "\$LOG_FILE" 2>&1
             log "Re-applied authenticated Inventory View preferences API"
+            PROXMORPH_APT_REPATCH=true \
+                PROXMORPH_SKIP_LOCK=true \
+                PROXMORPH_BACKUP_ROOT="\$BACKUP_ROOT" \
+                "\${INSTALL_DIR}/install.sh" reapply-novnc-clipboard >> "\$LOG_FILE" 2>&1
+            log "Re-applied native noVNC clipboard enhancement"
         fi
     fi  # end PVE/PBS else branch
 
@@ -3537,11 +3689,19 @@ install_themes() {
         mkdir -p "${INSTALL_DIR}/themes/patches"
         cp "${themes_source}/patches"/*.js "${INSTALL_DIR}/themes/patches/" 2>/dev/null || true
     fi
+    if [[ "$PRODUCT" == "PVE" && -d "${themes_source}/novnc" && "$themes_source" != "${INSTALL_DIR}/themes" ]]; then
+        mkdir -p "${INSTALL_DIR}/themes/novnc"
+        cp "${themes_source}/novnc/proxmorph-novnc.js" "${INSTALL_DIR}/themes/novnc/"
+        cp "${themes_source}/novnc/proxmorph-novnc.css" "${INSTALL_DIR}/themes/novnc/"
+    fi
 
-    # PVE stores Inventory and Appearance settings per authenticated account in pmxcfs.
+    # PVE stores Inventory, Appearance, and Console settings per authenticated account in pmxcfs.
     # This is installed before the hook so package updates can reapply the same
     # validated server-side extension from the cached release.
     install_pve_preferences_api
+
+    # Enhance Proxmox's supported noVNC clipboard transport without replacing it.
+    install_novnc_clipboard "$themes_source"
     
     # Install apt hook for persistence across updates
     install_apt_hook
@@ -3705,6 +3865,7 @@ uninstall_themes() {
             if [[ "$PRODUCT" == "PVE" ]]; then
                 remove_sensors
                 remove_managed_sensor_package
+                remove_novnc_clipboard
                 remove_pve_preferences_api
             fi
         fi
@@ -4005,6 +4166,13 @@ main() {
                 return 1
             fi
             install_pve_preferences_api
+            ;;
+        reapply-novnc-clipboard)
+            if [[ "${PROXMORPH_APT_REPATCH:-false}" != "true" ]]; then
+                print_error "reapply-novnc-clipboard is reserved for the ProxMorph APT hook"
+                return 1
+            fi
+            install_novnc_clipboard "${INSTALL_DIR}/themes"
             ;;
         *)
             while true; do

@@ -13,7 +13,7 @@
  * protected API and the replicated Proxmox cluster filesystem. The selected
  * view itself continues to use Proxmox's native URL state.
  *
- * Version: 1.7.1
+ * Version: 1.8.0
  */
 (function () {
     'use strict';
@@ -24,7 +24,7 @@
     var CONNECTIVITY_VIEW_KEY = 'proxmorph-connectivity';
     var VNET_TYPE = 'proxmorph-vnet';
     var VNETS_URL = '/cluster/sdn/vnets';
-    var VERSION = '1.7.1';
+    var VERSION = '1.8.0';
     var PREFERENCES_URL = '/proxmorph/preferences';
     var MAX_INIT_ATTEMPTS = 40;
     var initAttempts = 0;
@@ -47,6 +47,8 @@
         'showStorage',
         'showNetwork',
         'showStoppedGuests',
+        'noVncContextMenu',
+        'noVncClipboardShortcuts',
     ];
     var choiceSettings = {
         uiFont: ['default', 'modern'],
@@ -62,6 +64,8 @@
         showStorage: false,
         showNetwork: false,
         showStoppedGuests: true,
+        noVncContextMenu: true,
+        noVncClipboardShortcuts: false,
         uiFont: 'default',
         uiTextSize: 'default',
     };
@@ -1073,6 +1077,42 @@
                 },
                 {
                     xtype: 'fieldset',
+                    title: 'Console clipboard',
+                    cls: 'pmx-inventory-section',
+                    margin: '0 0 12 0',
+                    items: [
+                        {
+                            xtype: 'checkboxfield',
+                            name: 'noVncContextMenu',
+                            boxLabel: 'Enable Shift + right-click clipboard menu',
+                            inputValue: true,
+                            uncheckedValue: false,
+                            checked: settings.noVncContextMenu,
+                            cls: 'pmx-inventory-option',
+                        },
+                        {
+                            xtype: 'component',
+                            cls: 'pmx-inventory-help',
+                            html: 'Keeps normal right-click available inside the guest while adding fast clipboard actions to noVNC.',
+                        },
+                        {
+                            xtype: 'checkboxfield',
+                            name: 'noVncClipboardShortcuts',
+                            boxLabel: 'Capture Ctrl+C and Ctrl+V in noVNC',
+                            inputValue: true,
+                            uncheckedValue: false,
+                            checked: settings.noVncClipboardShortcuts,
+                            cls: 'pmx-inventory-option',
+                        },
+                        {
+                            xtype: 'component',
+                            cls: 'pmx-inventory-help pmx-inventory-help-last',
+                            html: 'Optional. ProxMorph forwards the shortcut to the guest and synchronizes plain text with the browser clipboard.',
+                        },
+                    ],
+                },
+                {
+                    xtype: 'fieldset',
                     title: 'Account',
                     cls: 'pmx-inventory-section pmx-inventory-account-section',
                     margin: 0,
@@ -1098,7 +1138,7 @@
         });
 
         var win = Ext.create('Ext.window.Window', {
-            title: 'Inventory & Appearance',
+            title: 'Inventory, Appearance & Console',
             iconCls: 'fa fa-sitemap',
             modal: true,
             resizable: false,
@@ -1162,7 +1202,7 @@
                                     button.setDisabled(false);
                                 }
                                 Ext.Msg.alert(
-                                    'Unable to save Inventory & Appearance settings',
+                                    'Unable to save ProxMorph settings',
                                     response && response.htmlStatus
                                         ? response.htmlStatus
                                         : 'The ProxMorph preferences service is unavailable.',
@@ -1418,8 +1458,8 @@
             itemId: 'proxmorphInventorySettings',
             cls: 'x-btn-default-toolbar-small',
             iconCls: 'fa fa-fw fa-sitemap x-btn-icon-el-default-toolbar-small',
-            tooltip: 'Inventory and appearance settings',
-            ariaLabel: 'Inventory and appearance settings',
+            tooltip: 'Inventory, appearance, and console settings',
+            ariaLabel: 'Inventory, appearance, and console settings',
             margin: '0 0 0 3',
             handler: function () {
                 createSettingsWindow(viewSelector, resourceTree);

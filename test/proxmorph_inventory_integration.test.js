@@ -242,6 +242,8 @@ const formValues = {
     showStorage: false,
     showNetwork: true,
     showStoppedGuests: false,
+    noVncContextMenu: true,
+    noVncClipboardShortcuts: true,
     uiFont: 'modern',
     uiTextSize: 'comfortable',
 };
@@ -285,6 +287,8 @@ global.Proxmox = {
                             showStorage: false,
                             showNetwork: false,
                             showStoppedGuests: true,
+                            noVncContextMenu: true,
+                            noVncClipboardShortcuts: false,
                             uiFont: 'default',
                             uiTextSize: 'default',
                         },
@@ -355,7 +359,7 @@ assert.deepEqual(records, [
     { key: 'proxmorph-connectivity', value: 'Connectivity View' },
 ]);
 assert.equal(settingsButton.itemId, 'proxmorphInventorySettings');
-assert.equal(settingsButton.tooltip, 'Inventory and appearance settings');
+assert.equal(settingsButton.tooltip, 'Inventory, appearance, and console settings');
 assert.equal(navigation.itemId, 'proxmorphViewNavigation');
 assert.equal(navigation.hidden, true, 'icon navigation is opt-in');
 assert.equal(selector.hidden, false, 'native picker remains visible by default');
@@ -469,6 +473,14 @@ assert.ok(
     settingsItems.some((item) => item.name === 'uiTextSize'),
     'settings modal exposes the text-size option',
 );
+assert.ok(
+    settingsItems.some((item) => item.name === 'noVncContextMenu'),
+    'settings modal exposes the Shift + right-click clipboard menu option',
+);
+assert.ok(
+    settingsItems.some((item) => item.name === 'noVncClipboardShortcuts'),
+    'settings modal exposes optional noVNC shortcut capture',
+);
 const stoppedGuestsControl = settingsItems.find(
     (item) => item.itemId === 'proxmorphShowStoppedGuests',
 );
@@ -492,7 +504,7 @@ assert.ok(
 );
 assert.deepEqual(
     settingsFormConfig.items.map((item) => item.title),
-    ['Navigation', 'Hierarchy', 'Visible resources', 'Typography', 'Account'],
+    ['Navigation', 'Hierarchy', 'Visible resources', 'Typography', 'Console clipboard', 'Account'],
     'settings are organized into compact task-focused sections',
 );
 assert.equal(
@@ -539,6 +551,8 @@ assert.equal(apiRequests[1].url, '/proxmorph/preferences');
 assert.equal(apiRequests[1].params.groupByNode, 0);
 assert.equal(apiRequests[1].params.useIconNavigation, 1);
 assert.equal(apiRequests[1].params.showStoppedGuests, 0);
+assert.equal(apiRequests[1].params.noVncContextMenu, 1);
+assert.equal(apiRequests[1].params.noVncClipboardShortcuts, 1);
 assert.equal(apiRequests[1].params.uiFont, 'modern');
 assert.equal(apiRequests[1].params.uiTextSize, 'comfortable');
 assert.deepEqual(

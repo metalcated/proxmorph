@@ -1,0 +1,201 @@
+/* ProxMorph noVNC Clipboard — theme-aware native clipboard enhancement */
+
+html.proxmorph-novnc {
+    --pmx-novnc-bg: var(--pm-bg-base, var(--gh-canvas-default, #1f2226));
+    --pmx-novnc-surface: var(--pm-bg-surface, var(--gh-canvas-muted, #282b2f));
+    --pmx-novnc-elevated: var(--pm-bg-elevated, var(--gh-canvas-subtle, #34383d));
+    --pmx-novnc-text: var(--pm-text, var(--gh-fg-default, #dee0e3));
+    --pmx-novnc-muted: var(--pm-text-dim, var(--gh-fg-muted, #b7bcc2));
+    --pmx-novnc-border: var(--pm-border, var(--gh-border-default, #454a50));
+    --pmx-novnc-accent: var(--pm-accent, var(--gh-accent-fg, #006eff));
+    --pmx-novnc-success: var(--pm-success, var(--gh-success-fg, #37be5f));
+    --pmx-novnc-warning: var(--pm-warning, var(--gh-attention-fg, #f5a623));
+    --pmx-novnc-radius: var(--pm-radius-md, 6px);
+    --pmx-novnc-font: "Roboto Flex", "Segoe UI Variable", "Segoe UI", system-ui, -apple-system,
+        BlinkMacSystemFont, sans-serif;
+}
+
+html.proxmorph-novnc body,
+html.proxmorph-novnc button,
+html.proxmorph-novnc textarea {
+    font-family: var(--pmx-novnc-font) !important;
+}
+
+html.proxmorph-novnc #noVNC_clipboard {
+    box-sizing: border-box !important;
+    width: min(380px, calc(100vw - 32px)) !important;
+    padding: 14px !important;
+    color: var(--pmx-novnc-text) !important;
+    background: var(--pmx-novnc-surface) !important;
+    border: 1px solid var(--pmx-novnc-border) !important;
+    border-radius: var(--pmx-novnc-radius) !important;
+    box-shadow: 0 14px 42px rgba(0, 0, 0, 0.32) !important;
+}
+
+html.proxmorph-novnc #noVNC_clipboard .noVNC_heading {
+    margin: -14px -14px 12px !important;
+    padding: 12px 14px !important;
+    color: var(--pmx-novnc-text) !important;
+    background: transparent !important;
+    border-bottom: 1px solid var(--pmx-novnc-border) !important;
+}
+
+html.proxmorph-novnc #noVNC_clipboard .noVNC_subheading,
+html.proxmorph-novnc .pmx-novnc-hint,
+html.proxmorph-novnc .pmx-novnc-preference-summary {
+    color: var(--pmx-novnc-muted) !important;
+    line-height: 1.45 !important;
+}
+
+html.proxmorph-novnc #noVNC_clipboard_text {
+    box-sizing: border-box !important;
+    width: 100% !important;
+    min-height: 126px !important;
+    margin: 8px 0 12px !important;
+    padding: 10px 12px !important;
+    resize: vertical !important;
+    color: var(--pmx-novnc-text) !important;
+    caret-color: var(--pmx-novnc-accent) !important;
+    background: var(--pmx-novnc-bg) !important;
+    border: 1px solid var(--pmx-novnc-border) !important;
+    border-radius: var(--pmx-novnc-radius) !important;
+    outline: none !important;
+}
+
+html.proxmorph-novnc #noVNC_clipboard_text:focus {
+    border-color: var(--pmx-novnc-accent) !important;
+    box-shadow: 0 0 0 2px color-mix(in srgb, var(--pmx-novnc-accent) 24%, transparent) !important;
+}
+
+html.proxmorph-novnc .pmx-novnc-enhancement,
+html.proxmorph-novnc .pmx-novnc-actions {
+    display: flex !important;
+}
+
+html.proxmorph-novnc .pmx-novnc-enhancement {
+    flex-direction: column !important;
+    gap: 9px !important;
+}
+
+html.proxmorph-novnc .pmx-novnc-actions {
+    flex-wrap: wrap !important;
+    gap: 8px !important;
+}
+
+html.proxmorph-novnc .pmx-novnc-action {
+    min-height: 34px !important;
+    padding: 6px 11px !important;
+    color: var(--pmx-novnc-text) !important;
+    background: transparent !important;
+    background-image: none !important;
+    border: 1px solid var(--pmx-novnc-border) !important;
+    border-radius: var(--pmx-novnc-radius) !important;
+    box-shadow: none !important;
+    cursor: pointer !important;
+}
+
+html.proxmorph-novnc .pmx-novnc-action:hover,
+html.proxmorph-novnc .pmx-novnc-action:focus-visible {
+    color: var(--pmx-novnc-text) !important;
+    background: transparent !important;
+    border-color: var(--pmx-novnc-accent) !important;
+    outline: none !important;
+}
+
+html.proxmorph-novnc .pmx-novnc-action:disabled {
+    color: var(--pmx-novnc-muted) !important;
+    border-color: var(--pmx-novnc-border) !important;
+    cursor: not-allowed !important;
+    opacity: 0.55 !important;
+}
+
+html.proxmorph-novnc .pmx-novnc-status {
+    padding: 8px 10px !important;
+    color: var(--pmx-novnc-muted) !important;
+    background: var(--pmx-novnc-bg) !important;
+    border: 1px solid var(--pmx-novnc-border) !important;
+    border-left: 3px solid var(--pmx-novnc-accent) !important;
+    border-radius: var(--pmx-novnc-radius) !important;
+    font-size: 12px !important;
+    line-height: 1.4 !important;
+}
+
+html.proxmorph-novnc .pmx-novnc-status-ready {
+    border-left-color: var(--pmx-novnc-success) !important;
+}
+
+html.proxmorph-novnc .pmx-novnc-status-warning {
+    border-left-color: var(--pmx-novnc-warning) !important;
+}
+
+html.proxmorph-novnc .pmx-novnc-status-working {
+    border-left-color: var(--pmx-novnc-accent) !important;
+}
+
+html.proxmorph-novnc .pmx-novnc-preference-summary,
+html.proxmorph-novnc .pmx-novnc-hint {
+    margin: 0 !important;
+    font-size: 12px !important;
+}
+
+html.proxmorph-novnc .pmx-novnc-context-menu {
+    position: fixed !important;
+    z-index: 100000 !important;
+    display: none !important;
+    box-sizing: border-box !important;
+    width: 272px !important;
+    padding: 8px !important;
+    color: var(--pmx-novnc-text) !important;
+    background: var(--pmx-novnc-surface) !important;
+    border: 1px solid var(--pmx-novnc-border) !important;
+    border-radius: var(--pmx-novnc-radius) !important;
+    box-shadow: 0 16px 44px rgba(0, 0, 0, 0.38) !important;
+}
+
+html.proxmorph-novnc .pmx-novnc-context-menu-open {
+    display: flex !important;
+    flex-direction: column !important;
+    gap: 5px !important;
+}
+
+html.proxmorph-novnc .pmx-novnc-context-heading {
+    padding: 7px 9px 9px !important;
+    color: var(--pmx-novnc-text) !important;
+    border-bottom: 1px solid var(--pmx-novnc-border) !important;
+    font-size: 13px !important;
+    font-weight: 600 !important;
+}
+
+html.proxmorph-novnc .pmx-novnc-context-menu .pmx-novnc-action {
+    width: 100% !important;
+    text-align: left !important;
+}
+
+html.proxmorph-novnc .pmx-novnc-context-menu .pmx-novnc-status {
+    margin-top: 4px !important;
+}
+
+html.proxmorph-novnc #noVNC_clipboard_button.noVNC_selected,
+html.proxmorph-novnc #noVNC_clipboard_button.noVNC_selected:hover {
+    background: transparent !important;
+    border-color: var(--pmx-novnc-accent) !important;
+    box-shadow: inset 3px 0 0 var(--pmx-novnc-accent) !important;
+}
+
+@media (max-width: 540px) {
+    html.proxmorph-novnc #noVNC_clipboard {
+        width: calc(100vw - 20px) !important;
+        padding: 12px !important;
+    }
+
+    html.proxmorph-novnc .pmx-novnc-context-menu {
+        width: min(272px, calc(100vw - 16px)) !important;
+    }
+}
+
+@media (prefers-reduced-motion: reduce) {
+    html.proxmorph-novnc .pmx-novnc-context-menu,
+    html.proxmorph-novnc .pmx-novnc-action {
+        transition: none !important;
+    }
+}

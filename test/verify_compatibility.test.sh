@@ -18,6 +18,8 @@ PVE_CLUSTER_PM="${work}/Cluster.pm"
 PVE_API2_PM="${work}/API2.pm"
 PVE_PROXMORPH_API_PM="${work}/ProxMorph.pm"
 PVE_PREFERENCES_FILE="${work}/proxmorph-user-preferences.json"
+NOVNC_INDEX_TPL="${work}/novnc/index.html.tpl"
+NOVNC_PROXMORPH_DIR="${work}/novnc/proxmorph"
 PRODUCT="PVE"
 
 printf '%s\n' 'Proxmox.Utils = { theme_map: {' > "$PROXMOXLIB_JS"
@@ -30,6 +32,10 @@ printf '%s\n' "Ext.define('PVE.form.ViewSelector');" "Ext.define('PVE.tree.Resou
     "Ext.define('PVE.node.CmdMenu');" > "$PVE_MANAGER_JS"
 printf '%s\n' 'my $observed = {' '};' > "$PVE_CLUSTER_PM"
 printf '%s\n' 'package PVE::API2;' 'use base qw(PVE::RESTHandler);' '1;' > "$PVE_API2_PM"
+mkdir -p "$(dirname "$NOVNC_INDEX_TPL")"
+printf '%s\n' '<html><head>' '  <script type="module">' \
+    '    import UI from "/novnc/app.js?ver=1.7.0-2";' '  </script>' '</head><body>' \
+    '  <input id="noVNC_clipboard_button">' '</body></html>' > "$NOVNC_INDEX_TPL"
 
 fail=0
 check() {
@@ -95,6 +101,13 @@ validate_runtime_contracts >/dev/null 2>&1
 check 'missing authenticated API anchor fails closed' 1 "$?"
 
 printf '%s\n' 'package PVE::API2;' 'use base qw(PVE::RESTHandler);' '1;' > "$PVE_API2_PM"
+printf '%s\n' '<html><head></head><body><input id="noVNC_clipboard_button"></body></html>' > "$NOVNC_INDEX_TPL"
+validate_runtime_contracts >/dev/null 2>&1
+check 'missing native noVNC application module fails closed' 1 "$?"
+
+printf '%s\n' '<html><head>' '  <script type="module">' \
+    '    import UI from "/novnc/app.js?ver=1.7.0-2";' '  </script>' '</head><body>' \
+    '  <input id="noVNC_clipboard_button">' '</body></html>' > "$NOVNC_INDEX_TPL"
 INSTALL_DIR="${work}/install"
 INSTALLED_PATHS_FILE="${INSTALL_DIR}/.installed-paths"
 POST_INVOKE_SCRIPT="${work}/post-update.sh"
@@ -113,6 +126,17 @@ check 'cluster preferences registration is singular' 1 "$(grep -cF "$PVE_CLUSTER
 check 'API route registration is singular' 1 "$(grep -cF "$PVE_API_PREFS_MARKER" "$PVE_API2_PM")"
 grep -qF "path => 'proxmorph'," "$PVE_API2_PM"
 check 'API route patch preserves its Perl string quoting' 0 "$?"
+novnc_source="${work}/themes"
+mkdir -p "${novnc_source}/novnc"
+printf '%s\n' '(function () {})();' > "${novnc_source}/novnc/proxmorph-novnc.js"
+printf '%s\n' '.pmx-novnc-context-menu { display: none; }' > "${novnc_source}/novnc/proxmorph-novnc.css"
+install_novnc_clipboard "$novnc_source" >/dev/null 2>&1
+check 'native noVNC clipboard enhancement patches a clean template' 0 "$?"
+install_novnc_clipboard "$novnc_source" >/dev/null 2>&1
+check 'native noVNC clipboard enhancement is idempotent' 0 "$?"
+check 'noVNC loader marker is singular' 1 "$(grep -cF "$NOVNC_PATCH_MARKER" "$NOVNC_INDEX_TPL")"
+grep -qF 'import ProxMorphUI from "/novnc/app.js?ver=1.7.0-2";' "$NOVNC_INDEX_TPL"
+check 'noVNC loader reuses the exact package module URL' 0 "$?"
 install_apt_hook >/dev/null 2>&1
 bash -n "$POST_INVOKE_SCRIPT"
 check 'generated update hook is valid shell' 0 "$?"
@@ -124,6 +148,8 @@ grep -qF 'restore "$transaction_backup_id" --yes --force' "$POST_INVOKE_SCRIPT"
 check 'generated update hook has automatic rollback' 0 "$?"
 grep -qF 'reapply-preferences-api' "$POST_INVOKE_SCRIPT"
 check 'generated update hook restores the authenticated preferences API' 0 "$?"
+grep -qF 'reapply-novnc-clipboard' "$POST_INVOKE_SCRIPT"
+check 'generated update hook restores the native noVNC clipboard enhancement' 0 "$?"
 grep -qF "grep -cF 'my \$observed = {'" "$POST_INVOKE_SCRIPT"
 check 'generated update hook preserves the cluster-module anchor literally' 0 "$?"
 grep -qF 'systemctl restart pvedaemon "$PROXY_SERVICE"' "$POST_INVOKE_SCRIPT"

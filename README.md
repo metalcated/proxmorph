@@ -199,9 +199,20 @@ Connections loads vNets from Proxmox's authenticated `/cluster/sdn/vnets` endpoi
 
 The modal's **Typography** section can retain the native Proxmox font or use a cleaner native UI stack that prefers Roboto Flex, Segoe UI Variable, and the browser operating system's interface font. Text size can remain at 13 px or move to the coordinated 14 px comfortable and 15 px large scales. The coverage includes resource trees, VM/CT navigation, grids, toolbars, menus, forms, tags, titles, tooltips, dropdowns, progress labels, and empty states. These rules apply after the active theme, so colors stay theme-specific while typography remains consistent across every ProxMorph theme. Font Awesome icons and monospace console/code surfaces are explicitly left on their purpose-built fonts.
 
-The selected view participates in Proxmox's native URL/history state. The modal's visibility, hierarchy, icon-switcher, and typography choices are saved for the authenticated Proxmox username by `/api2/extjs/proxmorph/preferences`; no browser `localStorage` is used. PVE stores the small JSON preference map at `/etc/pve/priv/proxmorph-user-preferences.json`, so pmxcfs replicates it across cluster nodes. The API validates every boolean and font/size choice, only reads or writes the current authenticated account's entry, and does not alter `user.cfg` or add properties to Proxmox user objects. This account-level preference service is PVE-only; PDM inventory support remains a separate future implementation.
+The selected view participates in Proxmox's native URL/history state. The modal's visibility, hierarchy, icon-switcher, typography, and noVNC clipboard choices are saved for the authenticated Proxmox username by `/api2/extjs/proxmorph/preferences`; no browser `localStorage` is used. PVE stores the small JSON preference map at `/etc/pve/priv/proxmorph-user-preferences.json`, so pmxcfs replicates it across cluster nodes. The API validates every boolean and font/size choice, only reads or writes the current authenticated account's entry, and does not alter `user.cfg` or add properties to Proxmox user objects. This account-level preference service is PVE-only; PDM inventory support remains a separate future implementation.
 
 The hierarchy itself comes from the resource pools already configured in Proxmox; slash-delimited pools follow Proxmox's native **Nest Pools** tree setting. Pools remain Proxmox permission/resource groups—not vCenter VM folders.
+
+### noVNC clipboard (PVE)
+
+ProxMorph enhances Proxmox's existing noVNC clipboard transport; it does not emulate text by typing individual keys. When a VM's Display hardware has **Clipboard: VNC** enabled, the native clipboard icon gains **Paste into guest**, **Copy from guest**, and **Clear** actions. **Shift + right-click** anywhere in the console opens the same theme-native action menu while normal right-click continues to reach the guest.
+
+The Inventory, Appearance & Console modal includes two account-level controls:
+
+- **Enable Shift + right-click clipboard menu** is enabled by default.
+- **Capture Ctrl+C and Ctrl+V in noVNC** is opt-in. When enabled, ProxMorph forwards the shortcut to the guest and synchronizes the resulting plain text with the browser clipboard.
+
+The VM must use Proxmox's `clipboard=vnc` display option, and its guest OS must run a compatible vdagent (`spice-vdagent` on Linux or the SPICE Guest Tools on Windows). A display change may require a full VM restart before Proxmox exposes the clipboard icon. Clipboard transfer is plain text only. ProxMorph never writes clipboard contents to the preference file, browser storage, logs, or backups, and clears its in-memory copy when the console disconnects. Browser clipboard permission failures fall back to the existing in-console clipboard field instead of a JavaScript prompt.
 
 ## 🔍 What the installer changes on your system
 
@@ -212,6 +223,7 @@ Run as root, `install.sh` makes only these changes, all reversible with `./insta
 - **Index template:** injects `<script>` / `<link>` tags into the product index template for the JS patches and (PDM) theme links.
 - **Compatibility preflight:** validates the installed package version, template insertion points, theme map, PVE UI loader, and sensor anchor before modifying package-owned files.
 - **PVE account preferences:** installs a protected API module, registers one pmxcfs preference file, and patches the PVE API root so Inventory View and typography settings follow the authenticated account across cluster nodes.
+- **PVE noVNC clipboard:** installs two assets under `/usr/share/novnc-pve/proxmorph/` and injects a marked loader into `index.html.tpl`; the native noVNC clipboard button and guest transport remain authoritative.
 - **Persistence:** installs an APT hook at `/etc/apt/apt.conf.d/99proxmorph` that runs `/opt/proxmorph/post-update.sh` to back up the new package files and re-apply the patches after a Proxmox update. The hook re-patches from the local `/opt/proxmorph` copy only; it downloads nothing.
 - **Sensors (PVE, optional):** after one explicit opt-in, installs `lm-sensors` noninteractively if needed, runs automatic hardware detection only when readings remain unavailable, and edits `Nodes.pm` to expose the readings.
 
@@ -219,11 +231,11 @@ Run as root, `install.sh` makes only these changes, all reversible with `./insta
 
 Before every install, update, reinstall, restore, uninstall, default-theme change, or sensor change, ProxMorph creates a versioned backup under `/root/.proxmorph-backups/<product>/`. The first clean snapshot becomes the uninstall baseline. Backups include:
 
-- Every package-owned file ProxMorph edits: `proxmoxlib.js`, the product index template, and on PVE `Nodes.pm`, `PVE/Cluster.pm`, and `PVE/API2.pm` as applicable.
+- Every package-owned file ProxMorph edits: `proxmoxlib.js`, the product index template, and on PVE the noVNC template, `Nodes.pm`, `PVE/Cluster.pm`, and `PVE/API2.pm` as applicable.
 - Every destination theme file that may be overwritten, including whether it was originally absent.
 - ProxMorph JavaScript/theme directories, `/opt/proxmorph`, `/etc/proxmorph`, the PVE preferences API module and replicated per-user preference file, the APT hook, and the ProxMorph log.
 - Original remote `Nodes.pm` and sensor-filter state before optional cluster sensor deployment.
-- Product package versions, optional `lm-sensors` presence/ownership state, file state, preserved ownership/modes, and SHA-256 checksums.
+- Product package versions (including `novnc-pve` on PVE), optional `lm-sensors` presence/ownership state, file state, preserved ownership/modes, and SHA-256 checksums.
 
 If a mutating operation fails or is interrupted, the just-created snapshot is restored automatically. Manual restore also creates a pre-restore snapshot first. A normal restore refuses to overwrite package-owned files when the installed Proxmox package versions differ from the backup; `--force` is available for an explicitly reviewed exception.
 

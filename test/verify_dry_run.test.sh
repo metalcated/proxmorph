@@ -23,6 +23,8 @@ PVE_CLUSTER_PM="${work}/system/perl/PVE/Cluster.pm"
 PVE_API2_PM="${work}/system/perl/PVE/API2.pm"
 PVE_PROXMORPH_API_PM="${work}/system/perl/PVE/API2/ProxMorph.pm"
 PVE_PREFERENCES_FILE="${work}/etc/pve/priv/proxmorph-user-preferences.json"
+NOVNC_INDEX_TPL="${work}/system/novnc/index.html.tpl"
+NOVNC_PROXMORPH_DIR="${work}/system/novnc/proxmorph"
 INSTALL_DIR="${work}/opt/proxmorph"
 INSTALLED_PATHS_FILE="${INSTALL_DIR}/.installed-paths"
 CONFIG_DIR="${work}/etc/proxmorph"
@@ -42,7 +44,7 @@ THEME_WEB_PATH="/pwt/themes"
 
 theme_source="${work}/release/themes"
 mkdir -p "$THEMES_DIR" "$(dirname "$INDEX_TEMPLATE")" "$(dirname "$PVE_MANAGER_JS")" \
-    "$(dirname "$NODES_PM")" "$theme_source/patches"
+    "$(dirname "$NODES_PM")" "$(dirname "$NOVNC_INDEX_TPL")" "$theme_source/patches" "$theme_source/novnc"
 printf '%s\n' 'Proxmox.Utils = { theme_map: {' > "$PROXMOXLIB_JS"
 printf '%s\n' '<script src="/pve2/js/pvemanagerlib.js"></script>' '</head>' '</body>' > "$INDEX_TEMPLATE"
 printf '%s\n' "Ext.define('PVE.form.ViewSelector');" "Ext.define('PVE.tree.ResourceTree');" \
@@ -53,9 +55,14 @@ printf '%s\n' "Ext.define('PVE.form.ViewSelector');" "Ext.define('PVE.tree.Resou
 printf '%s\n' '        my $dinfo = df('\''/'\'', 1);' > "$NODES_PM"
 printf '%s\n' 'my $observed = {' '};' > "$PVE_CLUSTER_PM"
 printf '%s\n' 'package PVE::API2;' 'use base qw(PVE::RESTHandler);' '1;' > "$PVE_API2_PM"
+printf '%s\n' '<html><head>' '  <script type="module">' \
+    '    import UI from "/novnc/app.js?ver=1.7.0-2";' '  </script>' '</head><body>' \
+    '  <input id="noVNC_clipboard_button">' '</body></html>' > "$NOVNC_INDEX_TPL"
 printf '%s\n' 'ORIGINAL THEME' > "${THEMES_DIR}/theme-test.css"
 printf '%s\n' '/*!Test*/' ':root {}' > "${theme_source}/theme-test.css"
 printf '%s\n' '(function () {})();' > "${theme_source}/patches/test.js"
+printf '%s\n' '(function () {})();' > "${theme_source}/novnc/proxmorph-novnc.js"
+printf '%s\n' '.pmx-novnc-context-menu { display: none; }' > "${theme_source}/novnc/proxmorph-novnc.css"
 
 fail=0
 check() {
@@ -90,6 +97,8 @@ check 'install dry run leaves the filesystem byte-for-byte unchanged' "$before" 
 check 'install dry run does not create a backup root' no "$([[ -e "$BACKUP_ROOT" ]] && echo yes || echo no)"
 check 'install dry run shows package-owned modification' yes "$(grep -qF "[modify] ${INDEX_TEMPLATE}" <<< "$install_preview" && echo yes || echo no)"
 check 'install dry run shows authenticated preference API changes' yes "$(grep -qF "[modify] ${PVE_API2_PM}" <<< "$install_preview" && echo yes || echo no)"
+check 'install dry run shows the noVNC template change' yes "$(grep -qF "[modify] ${NOVNC_INDEX_TPL}" <<< "$install_preview" && echo yes || echo no)"
+check 'install dry run records the noVNC asset directory as initially absent' yes "$(grep -qF "[record absent] ${NOVNC_PROXMORPH_DIR}" <<< "$install_preview" && echo yes || echo no)"
 check 'install dry run records preference data as initially absent' yes "$(grep -qF "[record absent] ${PVE_PREFERENCES_FILE}" <<< "$install_preview" && echo yes || echo no)"
 check 'install dry run shows proxy restart without performing it' yes "$(grep -qF '[restart] pveproxy' <<< "$install_preview" && echo yes || echo no)"
 

@@ -105,6 +105,8 @@ is($root_defaults->{showStorage}, 0, 'guest inventory excludes storage by defaul
 is($root_defaults->{showNetwork}, 0, 'guest inventory excludes connectivity by default');
 is($root_defaults->{uiFont}, 'default', 'the native Proxmox font remains the safe default');
 is($root_defaults->{uiTextSize}, 'default', 'the native 13 px scale remains the safe default');
+is($root_defaults->{noVncContextMenu}, 1, 'the safe Shift + right-click clipboard menu is enabled by default');
+is($root_defaults->{noVncClipboardShortcuts}, 0, 'direct clipboard shortcut capture remains opt-in');
 is_deeply(
     $put->{parameters}->{properties}->{uiFont}->{enum},
     [qw(default modern)],
@@ -120,6 +122,8 @@ $put->{code}->({
     groupByNode => 0,
     showPools => 1,
     useIconNavigation => 1,
+    noVncContextMenu => 1,
+    noVncClipboardShortcuts => 1,
     uiFont => 'modern',
     uiTextSize => 'comfortable',
 });
@@ -140,12 +144,14 @@ is(
     'comfortable',
     'the selected text size follows the same account',
 );
+is($get->{code}->({})->{noVncClipboardShortcuts}, 1, 'the console shortcut choice follows the same account');
 
 $PVE::RPCEnvironment::user = 'operator@pve';
 my $operator_defaults = $get->{code}->({});
 is($operator_defaults->{groupByNode}, 1, 'another account receives independent defaults');
 is($operator_defaults->{useIconNavigation}, 0, 'another account cannot read the first account settings');
 is($operator_defaults->{uiFont}, 'default', 'another account keeps its own font preference');
+is($operator_defaults->{noVncClipboardShortcuts}, 0, 'another account does not inherit clipboard shortcut capture');
 
 $PVE::Cluster::config->{users}->{'operator@pve'}->{uiFont} = 'unsupported';
 $PVE::Cluster::config->{users}->{'operator@pve'}->{uiTextSize} = 'huge';
