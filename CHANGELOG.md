@@ -23,7 +23,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **No-write dry run**: accepts `--dry-run` before or after supported commands; validates runtime and backup integrity, resolves restore IDs, and previews planned backup/file/package/service/remote-node actions without creating even an operation lock.
 
 ### Changed
-- Bumped the installer version to 2.19.2.
+- Bumped the installer version to 2.19.3.
 - **Transactional novnc-pve coverage**: compatibility preflight, dry run, full backup/restore, uninstall, package-version guards, and the APT update hook now cover the noVNC template and ProxMorph console assets.
 - **Simplified PVE sensor setup**: replaces the manual `apt install lm-sensors && sensors-detect` prerequisite and sensor-filter follow-up with one informed opt-in. ProxMorph installs `lm-sensors` noninteractively, reuses existing readings, and only runs `sensors-detect --auto` when required; individual filtering remains available through `sensors configure`.
 - **Sensor package rollback**: backups now record optional `lm-sensors` state and ownership. Transaction rollback, restore, and uninstall reinstate or remove the package as needed while retaining a copy that existed before ProxMorph.
@@ -32,6 +32,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Interactive menu actions now return to the main menu after success, cancellation, or failure instead of ending the installer; command-line subcommands remain one-shot.
 
 ### Fixed
+- **macOS browser context-menu leak**: remembers the detected Option + secondary-click through Safari's later `contextmenu` event, which can report different button/modifier details, and suppresses the browser menu without affecting normal guest right-click. Unavailable clipboard actions now state the required VM Display setting, guest vdagent, and full stop/start directly in the console menu.
 - **noVNC enhancement startup**: initializes from the stable `noVNC_container` instead of waiting for a nonexistent `noVNC_canvas` ID. Upstream noVNC creates its un-ID'd canvas dynamically after page startup, which previously caused every ProxMorph console enhancement to exit before binding. The install and APT-hook compatibility checks now validate the stable container contract.
 - **macOS noVNC clipboard menu gesture**: replaces the browser-reserved Shift + right-click trigger with Option/Alt + right-click and intercepts the full modified secondary-click sequence before noVNC, preventing both the native browser menu and an unintended guest click.
 - **Complete appearance coverage for PVE detail views**: extends account-selected typography to the VM/CT navigation treelist, default ExtJS menu/button/form/title subclasses, tags, progress text, empty states, and floating layers. Menus, dropdowns, tooltips, navigation labels, headers, and empty states now resolve their base colors through each ProxMorph theme's semantic tokens while preserving theme-specific hover, selected, and accent states.

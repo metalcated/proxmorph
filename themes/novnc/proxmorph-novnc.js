@@ -4,14 +4,17 @@
  * Enhances Proxmox's supported noVNC clipboard transport without replacing it.
  * Clipboard text remains in memory only and is cleared when the console closes.
  *
- * Version: 1.0.2
+ * Version: 1.0.3
  */
 (function () {
     'use strict';
 
-    var VERSION = '1.0.2';
+    var VERSION = '1.0.3';
     var PREFERENCES_URL = '/api2/extjs/proxmorph/preferences';
     var COPY_TIMEOUT_MS = 1800;
+    var CONTEXT_GESTURE_TIMEOUT_MS = 1000;
+    var CLIPBOARD_SETUP_MESSAGE =
+        'Enable Clipboard: VNC in Hardware → Display, install the guest vdagent, then fully stop and start the VM.';
     var defaults = {
         noVncContextMenu: true,
         noVncClipboardShortcuts: false,
@@ -29,6 +32,8 @@
     var copyTimer = null;
     var copyPending = false;
     var consoleFocused = false;
+    var contextGestureActive = false;
+    var contextGestureTimer = null;
     var lastGuestText = '';
     var availabilityState = null;
 
@@ -145,6 +150,26 @@
         return Boolean(event && event.altKey && event.button === 2);
     }
 
+    function contextMenuContinuation(event, active) {
+        return Boolean(
+            active &&
+                event &&
+                (event.type === 'contextmenu' || event.type === 'auxclick' || event.button === 2),
+        );
+    }
+
+    function clearContextGesture() {
+        contextGestureActive = false;
+        window.clearTimeout(contextGestureTimer);
+        contextGestureTimer = null;
+    }
+
+    function rememberContextGesture() {
+        contextGestureActive = true;
+        window.clearTimeout(contextGestureTimer);
+        contextGestureTimer = window.setTimeout(clearContextGesture, CONTEXT_GESTURE_TIMEOUT_MS);
+    }
+
     function resolveRuntimeElements(source) {
         return {
             clipboardButton: source.getElementById('noVNC_clipboard_button'),
@@ -198,7 +223,7 @@
         });
 
         if (!available) {
-            setStatus('Enable VNC clipboard on the VM display and install the guest vdagent.', 'warning');
+            setStatus(CLIPBOARD_SETUP_MESSAGE, 'warning');
         } else if (!copyPending) {
             setStatus('Clipboard transport is ready. Text is never saved by ProxMorph.', 'ready');
         }
@@ -209,7 +234,7 @@
             return;
         }
         if (clipboardButton.classList.contains('pve_hidden')) {
-            setStatus('VNC clipboard is not enabled for this guest.', 'warning');
+            setStatus(CLIPBOARD_SETUP_MESSAGE, 'warning');
             return;
         }
         hideContextMenu();
@@ -228,7 +253,7 @@
 
     function sendClipboardText(text) {
         if (!clipboardAvailable() || !clipboardText) {
-            setStatus('VNC clipboard is not available for this guest.', 'warning');
+            setStatus(CLIPBOARD_SETUP_MESSAGE, 'warning');
             return false;
         }
         clipboardText.value = text;
@@ -282,7 +307,7 @@
 
     function requestGuestCopy() {
         if (!clipboardAvailable()) {
-            setStatus('VNC clipboard is not available for this guest.', 'warning');
+            setStatus(CLIPBOARD_SETUP_MESSAGE, 'warning');
             return;
         }
         copyPending = true;
@@ -300,7 +325,7 @@
 
     function pasteFromBrowser() {
         if (!clipboardAvailable()) {
-            setStatus('VNC clipboard is not available for this guest.', 'warning');
+            setStatus(CLIPBOARD_SETUP_MESSAGE, 'warning');
             return Promise.resolve(false);
         }
         if (!navigator.clipboard || typeof navigator.clipboard.readText !== 'function') {
@@ -448,22 +473,34 @@
     }
 
     function handleConsoleContextGesture(event) {
-        if (
-            !settings.noVncContextMenu ||
-            !contextMenuGesture(event) ||
-            !container ||
-            !container.contains(event.target)
-        ) {
+        var insideConsole = Boolean(container && container.contains(event.target));
+        var startsGesture = Boolean(
+            settings.noVncContextMenu && insideConsole && contextMenuGesture(event),
+        );
+        var continuesGesture = Boolean(
+            settings.noVncContextMenu &&
+                contextMenuContinuation(event, contextGestureActive) &&
+                (insideConsole || event.type === 'contextmenu' || event.type === 'auxclick'),
+        );
+
+        if (!startsGesture && !continuesGesture) {
             return;
         }
         event.preventDefault();
         event.stopImmediatePropagation();
 
+        if (startsGesture) {
+            rememberContextGesture();
+        }
+
         if (
-            event.type === 'pointerdown' ||
-            (event.type === 'mousedown' && typeof window.PointerEvent === 'undefined') ||
-            (event.type === 'contextmenu' &&
-                (!contextMenu || !contextMenu.classList.contains('pmx-novnc-context-menu-open')))
+            startsGesture &&
+            (event.type === 'pointerdown' ||
+                (event.type === 'mousedown' && typeof window.PointerEvent === 'undefined') ||
+                (event.type === 'contextmenu' &&
+                    (!contextMenu ||
+                        !contextMenu.classList.contains('pmx-novnc-context-menu-open')))
+            )
         ) {
             showContextMenu(event.clientX, event.clientY);
         }
@@ -503,6 +540,7 @@
         lastGuestText = '';
         copyPending = false;
         consoleFocused = false;
+        clearContextGesture();
         window.clearTimeout(copyTimer);
         copyTimer = null;
         hideContextMenu();
@@ -584,6 +622,7 @@
         normalizePreferences: normalizePreferences,
         shortcutAction: shortcutAction,
         contextMenuGesture: contextMenuGesture,
+        contextMenuContinuation: contextMenuContinuation,
         runtimeElementsReady: runtimeElementsReady,
         clearTransientState: clearTransientState,
         stop: function () {

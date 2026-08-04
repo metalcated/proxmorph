@@ -16,7 +16,7 @@ require(path.join(__dirname, '..', 'themes', 'novnc', 'proxmorph-novnc.js'));
 
 const clipboard = global.window.ProxMorphNoVNCClipboard;
 assert.ok(clipboard, 'noVNC clipboard API is exposed');
-assert.equal(clipboard.version, '1.0.2');
+assert.equal(clipboard.version, '1.0.3');
 assert.deepEqual(clipboard.defaults, {
     noVncContextMenu: true,
     noVncClipboardShortcuts: false,
@@ -39,6 +39,12 @@ assert.equal(clipboard.shortcutAction({ ctrlKey: true, key: 'x' }), '');
 assert.equal(clipboard.contextMenuGesture({ altKey: true, button: 2 }), true);
 assert.equal(clipboard.contextMenuGesture({ shiftKey: true, button: 2 }), false);
 assert.equal(clipboard.contextMenuGesture({ altKey: true, button: 0 }), false);
+assert.equal(
+    clipboard.contextMenuContinuation({ type: 'contextmenu', button: 0 }, true),
+    true,
+    'a detected Option-click suppresses Safari contextmenu even when it reports button zero',
+);
+assert.equal(clipboard.contextMenuContinuation({ type: 'contextmenu', button: 0 }, false), false);
 const stableRuntimeIds = new Set([
     'noVNC_clipboard_button',
     'noVNC_clipboard',
