@@ -15,7 +15,7 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Configuration
-VERSION="2.19.1"
+VERSION="2.19.2"
 TARGET_VERSION="$VERSION"
 WIDGET_TOOLKIT_DIR="/usr/share/javascript/proxmox-widget-toolkit"
 THEMES_DIR="${WIDGET_TOOLKIT_DIR}/themes"
@@ -319,14 +319,20 @@ validate_runtime_contracts() {
         else
             local novnc_app_anchor_count
             local novnc_clipboard_anchor_count
+            local novnc_container_anchor_count
             novnc_app_anchor_count=$(grep -cF 'import UI from "/novnc/app.js' "$NOVNC_INDEX_TPL" 2>/dev/null || true)
             novnc_clipboard_anchor_count=$(grep -cF 'id="noVNC_clipboard_button"' "$NOVNC_INDEX_TPL" 2>/dev/null || true)
+            novnc_container_anchor_count=$(grep -cF 'id="noVNC_container"' "$NOVNC_INDEX_TPL" 2>/dev/null || true)
             if [[ "$novnc_app_anchor_count" -ne 1 ]]; then
                 print_error "Expected one noVNC application module anchor in ${NOVNC_INDEX_TPL}; found ${novnc_app_anchor_count}"
                 errors=$((errors + 1))
             fi
             if [[ "$novnc_clipboard_anchor_count" -ne 1 ]]; then
                 print_error "Expected one native noVNC clipboard control in ${NOVNC_INDEX_TPL}; found ${novnc_clipboard_anchor_count}"
+                errors=$((errors + 1))
+            fi
+            if [[ "$novnc_container_anchor_count" -ne 1 ]]; then
+                print_error "Expected one noVNC console container in ${NOVNC_INDEX_TPL}; found ${novnc_container_anchor_count}"
                 errors=$((errors + 1))
             fi
             if ! grep -q '</head>' "$NOVNC_INDEX_TPL"; then
@@ -2530,10 +2536,13 @@ if [ "\$needs_repatch" = "true" ]; then
         else
             novnc_app_anchor_count=\$(grep -cF 'import UI from "/novnc/app.js' "\$NOVNC_INDEX_TPL" 2>/dev/null || true)
             novnc_clipboard_anchor_count=\$(grep -cF 'id="noVNC_clipboard_button"' "\$NOVNC_INDEX_TPL" 2>/dev/null || true)
+            novnc_container_anchor_count=\$(grep -cF 'id="noVNC_container"' "\$NOVNC_INDEX_TPL" 2>/dev/null || true)
             if [ "\$novnc_app_anchor_count" -ne 1 ]; then
                 compatibility_error="expected one noVNC application module anchor, found \$novnc_app_anchor_count"
             elif [ "\$novnc_clipboard_anchor_count" -ne 1 ]; then
                 compatibility_error="expected one native noVNC clipboard control, found \$novnc_clipboard_anchor_count"
+            elif [ "\$novnc_container_anchor_count" -ne 1 ]; then
+                compatibility_error="expected one noVNC console container, found \$novnc_container_anchor_count"
             elif ! grep -q '</head>' "\$NOVNC_INDEX_TPL" 2>/dev/null; then
                 compatibility_error="missing </head> insertion point in \$NOVNC_INDEX_TPL"
             fi

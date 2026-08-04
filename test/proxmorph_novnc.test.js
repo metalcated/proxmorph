@@ -16,7 +16,7 @@ require(path.join(__dirname, '..', 'themes', 'novnc', 'proxmorph-novnc.js'));
 
 const clipboard = global.window.ProxMorphNoVNCClipboard;
 assert.ok(clipboard, 'noVNC clipboard API is exposed');
-assert.equal(clipboard.version, '1.0.1');
+assert.equal(clipboard.version, '1.0.2');
 assert.deepEqual(clipboard.defaults, {
     noVncContextMenu: true,
     noVncClipboardShortcuts: false,
@@ -39,5 +39,29 @@ assert.equal(clipboard.shortcutAction({ ctrlKey: true, key: 'x' }), '');
 assert.equal(clipboard.contextMenuGesture({ altKey: true, button: 2 }), true);
 assert.equal(clipboard.contextMenuGesture({ shiftKey: true, button: 2 }), false);
 assert.equal(clipboard.contextMenuGesture({ altKey: true, button: 0 }), false);
+const stableRuntimeIds = new Set([
+    'noVNC_clipboard_button',
+    'noVNC_clipboard',
+    'noVNC_clipboard_text',
+    'noVNC_container',
+]);
+assert.equal(
+    clipboard.runtimeElementsReady({
+        getElementById(id) {
+            return stableRuntimeIds.has(id) ? {} : null;
+        },
+    }),
+    true,
+    'noVNC initializes from stable template elements before the dynamic canvas exists',
+);
+assert.equal(
+    clipboard.runtimeElementsReady({
+        getElementById(id) {
+            return id === 'noVNC_container' ? null : {};
+        },
+    }),
+    false,
+    'noVNC initialization requires the stable console container',
+);
 
 console.log('PASS: ProxMorph noVNC clipboard preferences and shortcuts');

@@ -35,7 +35,8 @@ printf '%s\n' 'package PVE::API2;' 'use base qw(PVE::RESTHandler);' '1;' > "$PVE
 mkdir -p "$(dirname "$NOVNC_INDEX_TPL")"
 printf '%s\n' '<html><head>' '  <script type="module">' \
     '    import UI from "/novnc/app.js?ver=1.7.0-2";' '  </script>' '</head><body>' \
-    '  <input id="noVNC_clipboard_button">' '</body></html>' > "$NOVNC_INDEX_TPL"
+    '  <input id="noVNC_clipboard_button">' '  <div id="noVNC_container"></div>' \
+    '</body></html>' > "$NOVNC_INDEX_TPL"
 
 fail=0
 check() {
@@ -101,13 +102,21 @@ validate_runtime_contracts >/dev/null 2>&1
 check 'missing authenticated API anchor fails closed' 1 "$?"
 
 printf '%s\n' 'package PVE::API2;' 'use base qw(PVE::RESTHandler);' '1;' > "$PVE_API2_PM"
-printf '%s\n' '<html><head></head><body><input id="noVNC_clipboard_button"></body></html>' > "$NOVNC_INDEX_TPL"
+printf '%s\n' '<html><head></head><body><input id="noVNC_clipboard_button">' \
+    '<div id="noVNC_container"></div></body></html>' > "$NOVNC_INDEX_TPL"
 validate_runtime_contracts >/dev/null 2>&1
 check 'missing native noVNC application module fails closed' 1 "$?"
 
 printf '%s\n' '<html><head>' '  <script type="module">' \
     '    import UI from "/novnc/app.js?ver=1.7.0-2";' '  </script>' '</head><body>' \
     '  <input id="noVNC_clipboard_button">' '</body></html>' > "$NOVNC_INDEX_TPL"
+validate_runtime_contracts >/dev/null 2>&1
+check 'missing native noVNC console container fails closed' 1 "$?"
+
+printf '%s\n' '<html><head>' '  <script type="module">' \
+    '    import UI from "/novnc/app.js?ver=1.7.0-2";' '  </script>' '</head><body>' \
+    '  <input id="noVNC_clipboard_button">' '  <div id="noVNC_container"></div>' \
+    '</body></html>' > "$NOVNC_INDEX_TPL"
 INSTALL_DIR="${work}/install"
 INSTALLED_PATHS_FILE="${INSTALL_DIR}/.installed-paths"
 POST_INVOKE_SCRIPT="${work}/post-update.sh"

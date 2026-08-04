@@ -57,7 +57,8 @@ printf '%s\n' 'my $observed = {' '};' > "$PVE_CLUSTER_PM"
 printf '%s\n' 'package PVE::API2;' 'use base qw(PVE::RESTHandler);' '1;' > "$PVE_API2_PM"
 printf '%s\n' '<html><head>' '  <script type="module">' \
     '    import UI from "/novnc/app.js?ver=1.7.0-2";' '  </script>' '</head><body>' \
-    '  <input id="noVNC_clipboard_button">' '</body></html>' > "$NOVNC_INDEX_TPL"
+    '  <input id="noVNC_clipboard_button">' '  <div id="noVNC_container"></div>' \
+    '</body></html>' > "$NOVNC_INDEX_TPL"
 printf '%s\n' 'ORIGINAL THEME' > "${THEMES_DIR}/theme-test.css"
 printf '%s\n' '/*!Test*/' ':root {}' > "${theme_source}/theme-test.css"
 printf '%s\n' '(function () {})();' > "${theme_source}/patches/test.js"

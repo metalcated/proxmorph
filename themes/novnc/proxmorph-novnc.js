@@ -4,12 +4,12 @@
  * Enhances Proxmox's supported noVNC clipboard transport without replacing it.
  * Clipboard text remains in memory only and is cleared when the console closes.
  *
- * Version: 1.0.1
+ * Version: 1.0.2
  */
 (function () {
     'use strict';
 
-    var VERSION = '1.0.1';
+    var VERSION = '1.0.2';
     var PREFERENCES_URL = '/api2/extjs/proxmorph/preferences';
     var COPY_TIMEOUT_MS = 1800;
     var defaults = {
@@ -20,7 +20,6 @@
     var clipboardButton = null;
     var clipboardPanel = null;
     var clipboardText = null;
-    var canvas = null;
     var container = null;
     var contextMenu = null;
     var panelStatus = null;
@@ -144,6 +143,25 @@
 
     function contextMenuGesture(event) {
         return Boolean(event && event.altKey && event.button === 2);
+    }
+
+    function resolveRuntimeElements(source) {
+        return {
+            clipboardButton: source.getElementById('noVNC_clipboard_button'),
+            clipboardPanel: source.getElementById('noVNC_clipboard'),
+            clipboardText: source.getElementById('noVNC_clipboard_text'),
+            container: source.getElementById('noVNC_container'),
+        };
+    }
+
+    function runtimeElementsReady(source) {
+        var elements = resolveRuntimeElements(source);
+        return Boolean(
+            elements.clipboardButton &&
+                elements.clipboardPanel &&
+                elements.clipboardText &&
+                elements.container,
+        );
     }
 
     function setStatus(message, state) {
@@ -512,13 +530,13 @@
     }
 
     function initialize() {
-        clipboardButton = document.getElementById('noVNC_clipboard_button');
-        clipboardPanel = document.getElementById('noVNC_clipboard');
-        clipboardText = document.getElementById('noVNC_clipboard_text');
-        canvas = document.getElementById('noVNC_canvas');
-        container = document.getElementById('noVNC_container');
+        var elements = resolveRuntimeElements(document);
+        clipboardButton = elements.clipboardButton;
+        clipboardPanel = elements.clipboardPanel;
+        clipboardText = elements.clipboardText;
+        container = elements.container;
 
-        if (!clipboardButton || !clipboardPanel || !clipboardText || !canvas || !container) {
+        if (!runtimeElementsReady(document)) {
             return;
         }
 
@@ -566,6 +584,7 @@
         normalizePreferences: normalizePreferences,
         shortcutAction: shortcutAction,
         contextMenuGesture: contextMenuGesture,
+        runtimeElementsReady: runtimeElementsReady,
         clearTransientState: clearTransientState,
         stop: function () {
             window.clearInterval(bindTimer);
