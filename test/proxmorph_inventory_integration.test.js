@@ -527,8 +527,8 @@ assert.match(
 );
 assert.match(
     navigationStyle.css,
-    /--proxmorph-ui-font: "Roboto Flex", "Segoe UI Variable"/,
-    'the modern option uses a native variable-font stack without changing icon fonts',
+    /--proxmorph-ui-font: "Avenir Next", Avenir, "Helvetica Neue", "Segoe UI Variable"/,
+    'the modern option uses the vCenter-inspired native font stack without changing icon fonts',
 );
 assert.match(
     navigationStyle.css,
@@ -562,6 +562,21 @@ assert.match(
 );
 assert.match(
     navigationStyle.css,
+    /\.x-btn-wrap-default-toolbar-small\.x-btn-split-right::after[^}]*border: 0 !important;[^}]*margin-left: 7px !important;/,
+    'split toolbar actions use spacing and a chevron without an internal divider',
+);
+assert.match(
+    navigationStyle.css,
+    /\.x-btn-menu-active[^}]*box-shadow: none !important;/,
+    'open toolbar menus use a quiet surface without an underline',
+);
+assert.match(
+    navigationStyle.css,
+    /html\.proxmorph-text-large \{[^}]*--proxmorph-ui-size: 15px;[^}]*--proxmorph-control-font-size: 14px;/,
+    'large content text keeps compact toolbar labels within the stable ExtJS geometry',
+);
+assert.match(
+    navigationStyle.css,
     /\.x-box-target:has\(#view\) > \.x-btn\.x-btn-default-toolbar-small[^}]*border: 1px solid var\(--pm-border[^}]*height: 28px !important;/,
     'the established outlined inventory switcher controls retain their compact treatment',
 );
@@ -577,8 +592,13 @@ assert.match(
 );
 assert.match(
     navigationStyle.css,
-    /\.x-tab-default-top\.x-tab-active[^}]*box-shadow: inset 0 -2px 0 var\(--pm-accent/,
-    'active tabs use a slim theme-colored edge instead of a filled block',
+    /\.x-tab-default-top\.x-tab-active[^}]*background-color: var\(--proxmorph-modern-selected\)[^}]*box-shadow: none !important;/,
+    'active tabs use a quiet theme-colored surface without an underline',
+);
+assert.match(
+    navigationStyle.css,
+    /\.x-tab-default-top\.x-tab-active::after[^}]*content: none !important;[^}]*display: none !important;/,
+    'theme-provided active-tab underline pseudo-elements are suppressed',
 );
 
 const applyButton = settingsWindow.config.buttons.find((button) => button.text === 'Apply');
