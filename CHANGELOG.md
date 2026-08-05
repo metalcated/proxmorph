@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **No-write dry run**: accepts `--dry-run` before or after supported commands; validates runtime and backup integrity, resolves restore IDs, and previews planned backup/file/package/service/remote-node actions without creating even an operation lock.
 
 ### Changed
-- Bumped the installer version to 2.20.1.
+- Bumped the installer version to 2.20.2.
 - **Transactional novnc-pve coverage**: compatibility preflight, dry run, full backup/restore, uninstall, package-version guards, and the APT update hook now cover the noVNC template and ProxMorph console assets.
 - **Simplified PVE sensor setup**: replaces the manual `apt install lm-sensors && sensors-detect` prerequisite and sensor-filter follow-up with one informed opt-in. ProxMorph installs `lm-sensors` noninteractively, reuses existing readings, and only runs `sensors-detect --auto` when required; individual filtering remains available through `sensors configure`.
 - **Sensor package rollback**: backups now record optional `lm-sensors` state and ownership. Transaction rollback, restore, and uninstall reinstate or remove the package as needed while retaining a copy that existed before ProxMorph.
@@ -37,6 +37,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Large-text action-bar stability**: allows navigation, resources, menus, and data content to reach 15 px while capping compact action labels at 14 px and keeping their measured chrome at 30 px. This prevents the large setting from stretching fixed ExtJS toolbars into adjacent controls.
 - **Duplicate action and tab highlighting**: removes the modernization layer's active underline, theme-provided tab underline pseudo-elements, split-button seams, and docked-toolbar bottom rule. Active actions and tabs now use one restrained theme-tinted surface.
 - **Uniform data-row selection**: replaces the rounded first-cell pill and accent edge with one continuous, theme-tinted row background across type and value cells.
+- **Focused hardware icon overlap**: keeps SVG-backed hardware and resource icons in the row's flex layout when ExtJS marks the selected cell as focused, preventing the icon from becoming absolutely positioned over its label.
+- **Modern-font legibility**: sets the vCenter-inspired interface to a deliberate 400 body weight with native font smoothing, while retaining 500-weight section headings. This avoids the inherited 300-weight rendering that made dark-theme labels and values appear faint.
 - **Hardware and resource row alignment**: vertically centers image and Font Awesome icons with their labels and values, preserves row height across selection, and restores a subtle divider between type and value columns.
 - **macOS browser context-menu leak**: remembers the detected Option + secondary-click through Safari's later `contextmenu` event, which can report different button/modifier details, and suppresses the browser menu without affecting normal guest right-click. Unavailable clipboard actions now state the required VM Display setting, guest vdagent, and full stop/start directly in the console menu.
 - **noVNC enhancement startup**: initializes from the stable `noVNC_container` instead of waiting for a nonexistent `noVNC_canvas` ID. Upstream noVNC creates its un-ID'd canvas dynamically after page startup, which previously caused every ProxMorph console enhancement to exit before binding. The install and APT-hook compatibility checks now validate the stable container contract.

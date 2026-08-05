@@ -537,6 +537,11 @@ assert.match(
 );
 assert.match(
     navigationStyle.css,
+    /html\.proxmorph-font-modern \.x-treelist-item-text[^}]*font-weight: 400 !important;[^}]*-webkit-font-smoothing: auto;/,
+    'the modern font keeps readable regular weight and native smoothing',
+);
+assert.match(
+    navigationStyle.css,
     /html\[class\*="proxmorph-text-"\] \.x-treelist-item-text[^}]*font-size: var\(--proxmorph-ui-size\) !important;/,
     'the VM and container navigation treelist inherits the selected text scale',
 );
@@ -589,6 +594,11 @@ assert.match(
     navigationStyle.css,
     /\.x-grid-item:has\(td\[class\*="itype-icon"\], td\.pve-itype-fa\) \.x-grid-cell-inner[^}]*display: flex !important;[^}]*align-items: center !important;/,
     'hardware and resource rows vertically center icons and values',
+);
+assert.match(
+    navigationStyle.css,
+    /td\[class\*="itype-icon"\] > \.x-grid-cell-inner::before[^}]*inset: auto !important;[^}]*position: static !important;[^}]*transform: none !important;/,
+    'focused hardware rows keep their icon in the flex layout instead of overlaying the label',
 );
 assert.match(
     navigationStyle.css,
