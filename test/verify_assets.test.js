@@ -103,6 +103,20 @@ for (const file of pveThemeFiles) {
     });
 }
 
+for (const file of ['theme-unifi.css', 'theme-unifi-oled.css']) {
+    const source = fs.readFileSync(path.join(root, 'themes', file), 'utf8');
+    assert.match(
+        source,
+        /\.x-tree-arrows \.x-tree-expander\s*\{[^}]*filter:\s*none\s*!important;/s,
+        `${file} does not brighten custom tree chevrons`,
+    );
+    assert.match(
+        source,
+        /\.x-tree-expander:hover::before\s*\{[^}]*color:\s*var\(--pm-accent\)\s*!important;/s,
+        `${file} uses its primary accent for tree-chevron hover`,
+    );
+}
+
 for (const file of jsFiles) {
     const source = fs.readFileSync(file, 'utf8');
     assert.doesNotThrow(() => new Function(source), `${path.relative(root, file)} parses`);

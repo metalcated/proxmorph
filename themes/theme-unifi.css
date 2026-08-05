@@ -659,7 +659,8 @@ i.pmx-itype-icon-memory::before,
 }
 
 .x-tree-arrows .x-tree-expander {
-    filter: brightness(200%);
+    /* Preserve the exact semantic colors used by the custom chevron below. */
+    filter: none !important;
 }
 
 /* =====================================================
@@ -705,7 +706,7 @@ tr:not(.x-grid-tree-node-expanded) .x-tree-expander::before {
 
 /* Hover effect - UniFi blue accent */
 .x-tree-expander:hover::before {
-    color: #006EFF !important;
+    color: var(--pm-accent) !important;
 }
 
 /* Gap before node icon */
