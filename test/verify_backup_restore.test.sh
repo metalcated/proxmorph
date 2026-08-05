@@ -153,7 +153,7 @@ mkdir -p "$JS_PATCHES_DIR" "$INSTALL_DIR"
 printf '%s\n' 'installed patch' > "${JS_PATCHES_DIR}/installed.js"
 printf '%s\n' 'installed theme' > "${THEMES_DIR}/theme-test.css"
 printf '%s\n' "${THEMES_DIR}/theme-test.css" "$JS_PATCHES_DIR" > "$INSTALLED_PATHS_FILE"
-printf '%s\n' '2.19.3' > "${INSTALL_DIR}/.version"
+printf '%s\n' '2.20.0' > "${INSTALL_DIR}/.version"
 uninstall_themes --yes >/dev/null 2>&1
 check 'uninstall succeeds from the clean baseline' 0 "$?"
 check 'uninstall restores package-owned files' 'ORIGINAL PROXMOXLIB' "$(cat "$PROXMOXLIB_JS")"

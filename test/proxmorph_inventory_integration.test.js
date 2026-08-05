@@ -12,6 +12,7 @@ let navigation;
 let navigationStyle;
 let rootText = 'Datacenter';
 let routedContent;
+let layoutRefreshes = 0;
 const apiRequests = [];
 const documentClasses = new Set();
 const definedClasses = {};
@@ -211,6 +212,9 @@ const workspace = {
 
 const tree = {
     toggleCls() {},
+    updateLayout() {
+        layoutRefreshes++;
+    },
     setViewFilter(view) {
         rootText = 'Datacenter';
         appliedView = view;
@@ -368,6 +372,10 @@ assert.deepEqual(
     [...documentClasses].sort(),
     ['proxmorph-font-default', 'proxmorph-text-default'],
     'saved typography classes are applied when the account preferences load',
+);
+assert.ok(
+    layoutRefreshes > 0,
+    'loading saved typography refreshes the ExtJS layout before rendering wider controls',
 );
 assert.match(
     navigationStyle.css,
@@ -541,6 +549,36 @@ assert.match(
     navigationStyle.css,
     /html body \.x-panel-header-title-default[^}]*var\(--pm-text, var\(--gh-fg-default\)\) !important;/,
     'default ExtJS title subclasses resolve text color from the active theme tokens',
+);
+assert.match(
+    navigationStyle.css,
+    /html body \.x-btn\.x-btn-default-small[^}]*padding: 0 !important;/,
+    'primary controls keep padding inside their measured ExtJS width',
+);
+assert.match(
+    navigationStyle.css,
+    /\.x-btn\.x-btn-default-toolbar-small:not\(\.pmx-view-nav-button\)[^}]*border: 1px solid transparent !important;/,
+    'action toolbars use clean ghost buttons instead of permanent boxes',
+);
+assert.match(
+    navigationStyle.css,
+    /\.x-box-target:has\(#view\) > \.x-btn\.x-btn-default-toolbar-small[^}]*border: 1px solid var\(--pm-border[^}]*height: 28px !important;/,
+    'the established outlined inventory switcher controls retain their compact treatment',
+);
+assert.match(
+    navigationStyle.css,
+    /\.x-grid-with-col-lines \.x-grid-cell[^}]*border-right: 1px solid var\(--proxmorph-modern-divider\) !important;/,
+    'multi-column data grids retain a clear type and value separator',
+);
+assert.match(
+    navigationStyle.css,
+    /\.x-grid-item:has\(td\[class\*="itype-icon"\], td\.pve-itype-fa\) \.x-grid-cell-inner[^}]*display: flex !important;[^}]*align-items: center !important;/,
+    'hardware and resource rows vertically center icons and values',
+);
+assert.match(
+    navigationStyle.css,
+    /\.x-tab-default-top\.x-tab-active[^}]*box-shadow: inset 0 -2px 0 var\(--pm-accent/,
+    'active tabs use a slim theme-colored edge instead of a filled block',
 );
 
 const applyButton = settingsWindow.config.buttons.find((button) => button.text === 'Apply');
