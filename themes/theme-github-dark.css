@@ -1429,8 +1429,8 @@ div[id^="pveResourceTree"] .x-grid-cell {
     background-color: var(--gh-success-emphasis) !important;
 }
 
-.x-treelist-item-selected .x-treelist-item-text,
-.x-treelist-item-selected .x-treelist-item-icon {
+.x-treelist-item-selected > .x-treelist-row .x-treelist-item-text,
+.x-treelist-item-selected > .x-treelist-row .x-treelist-item-icon {
     color: var(--gh-fg-on-emphasis) !important;
 }
 

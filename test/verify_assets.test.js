@@ -103,6 +103,30 @@ for (const file of pveThemeFiles) {
     });
 }
 
+for (const file of pveThemeFiles.filter((name) => !name.startsWith('theme-unifi'))) {
+    const source = fs.readFileSync(path.join(root, 'themes', file), 'utf8');
+    assert.doesNotMatch(
+        source,
+        /^\.x-treelist-item-selected \.x-treelist-item-(?:text|icon)[,{]/m,
+        `${file} does not apply selected-row colors to nested navigation children`,
+    );
+    assert.doesNotMatch(
+        source,
+        /^\.x-treelist\.x-treelist-pve-nav \.x-treelist-item-selected \.x-treelist-item-(?:text|icon)[,{]/m,
+        `${file} does not reintroduce the nested-navigation selector through the PVE treelist`,
+    );
+    assert.match(
+        source,
+        /^\.x-treelist-item-selected > \.x-treelist-row \.x-treelist-item-text,/m,
+        `${file} scopes selected text color to the selected item's direct row`,
+    );
+    assert.match(
+        source,
+        /^\.x-treelist-item-selected > \.x-treelist-row \.x-treelist-item-icon[, {]/m,
+        `${file} scopes selected icon color to the selected item's direct row`,
+    );
+}
+
 for (const file of ['theme-unifi.css', 'theme-unifi-oled.css']) {
     const source = fs.readFileSync(path.join(root, 'themes', file), 'utf8');
     assert.match(

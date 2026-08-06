@@ -1752,10 +1752,10 @@ div[id^="pveResourceTree"] .x-grid-cell {
     background-color: var(--drac-orange) !important;
 }
 
-.x-treelist-item-selected .x-treelist-item-text,
-.x-treelist-item-selected .x-treelist-item-icon,
-.x-treelist.x-treelist-pve-nav .x-treelist-item-selected .x-treelist-item-text,
-.x-treelist.x-treelist-pve-nav .x-treelist-item-selected .x-treelist-item-icon {
+.x-treelist-item-selected > .x-treelist-row .x-treelist-item-text,
+.x-treelist-item-selected > .x-treelist-row .x-treelist-item-icon,
+.x-treelist.x-treelist-pve-nav .x-treelist-item-selected > .x-treelist-row .x-treelist-item-text,
+.x-treelist.x-treelist-pve-nav .x-treelist-item-selected > .x-treelist-row .x-treelist-item-icon {
     color: var(--drac-on-accent) !important;
 }
 
