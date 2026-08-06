@@ -71,6 +71,19 @@ sensor_package_state=present
 restore_optional_package_state "$package_backup" true >/dev/null 2>&1
 check 'restore removes a ProxMorph-owned package recorded as absent' absent "$sensor_package_state"
 
+sensors() {
+    printf '%s\n' '{"pch_lewisburg-virtual-0":{"Adapter":"Virtual device","temp1":{"temp1_input":43.0}},"bnxt_en-pci-1900":{"Adapter":"PCI adapter","temp1":{"temp1_input":57.0,"temp1_max":95.0}},"power_meter-acpi-0":{"Adapter":"ACPI interface","power1":{"power1_average":160.0,"power1_input":155.0}}}'
+}
+
+detect_sensors >/dev/null 2>&1
+check 'generic temperature and power readings count as supported sensors' 0 "$?"
+
+enumerate_sensors
+sensor_entries=$(printf '%s\n' "${SENSOR_LIST[@]}")
+check 'sensor selection lists chipset temperatures' yes "$([[ "$sensor_entries" == *'Temp|pch_lewisburg-virtual-0|temp1|43.0°C'* ]] && echo yes || echo no)"
+check 'sensor selection lists network-adapter temperatures' yes "$([[ "$sensor_entries" == *'Temp|bnxt_en-pci-1900|temp1|57.0°C'* ]] && echo yes || echo no)"
+check 'sensor selection lists power averages once' 1 "$(printf '%s\n' "$sensor_entries" | grep -cF 'Power|power_meter-acpi-0|power1|160.0 W')"
+
 if [[ "$fail" -eq 0 ]]; then
     echo 'ALL PASS'
 else

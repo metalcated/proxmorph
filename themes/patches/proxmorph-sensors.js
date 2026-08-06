@@ -1,8 +1,8 @@
 /**
  * ProxMorph Hardware Sensors
  * Adds hardware sensor monitoring to the Proxmox VE node status panel.
- * Displays CPU, NVMe, HDD temperatures, fan speeds, and UPS status
- * in a compact single-row layout.
+ * Displays CPU, chipset, NIC, NVMe, HDD temperatures, power readings,
+ * fan speeds, and UPS status in a compact single-row layout.
  *
  * Requires:
  *   - lm-sensors installed on the Proxmox host
@@ -19,10 +19,12 @@
  *   - Intel (coretemp-isa-*) and AMD (k10temp-pci-*) CPU temperatures
  *   - NVMe drive temperatures (nvme-pci-*)
  *   - HDD/SATA drive temperatures (drivetemp-scsi-*)
+ *   - Additional lm-sensors temperatures, including chipset and NIC readings
+ *   - Power meters (power*_average and power*_input keys)
  *   - Fan speeds (recursive detection of fan*_input keys)
  *   - UPS status via NUT (upsc) — optional, shown inline when present
  *
- * Version: 1.2.0
+ * Version: 1.3.0
  */
 (function () {
     'use strict';
@@ -69,6 +71,11 @@
         return Ext.util.Format.number(val, '0.#') + '°' + SENSOR_UNIT;
     }
 
+    function formatPower(watts) {
+        if (watts === null || watts === undefined || isNaN(watts)) return '—';
+        return Ext.util.Format.number(watts, '0.##') + ' W';
+    }
+
     function tempColor(temp, max, crit, colors) {
         if (crit !== null && temp >= crit) return colors.error;
         if (max !== null && temp >= max)  return colors.warning;
@@ -99,6 +106,32 @@
 
     function sep(colors) {
         return '<span style="color:' + colors.textDim + ';opacity:0.4;margin:0 6px;">|</span>';
+    }
+
+    function humanizeSensorName(value) {
+        return value
+            .replace(/_/g, ' ')
+            .replace(/\b\w/g, function (letter) { return letter.toUpperCase(); });
+    }
+
+    function sensorSourceLabel(chipKey) {
+        var busMatch = chipKey.match(/-(?:pci|isa|virtual|acpi)-(.+)$/);
+        var busId = busMatch ? busMatch[1] : '';
+
+        if (chipKey.indexOf('bnxt_en-') === 0) return 'NIC' + (busId ? ' ' + busId : '');
+        if (chipKey.indexOf('pch_') === 0) return 'PCH';
+        if (chipKey.indexOf('acpitz-') === 0) return 'ACPI';
+        if (chipKey.indexOf('nvme-pci-') === 0) return 'NVMe' + (busId ? ' ' + busId : '');
+        if (chipKey.indexOf('power_meter-') === 0) return 'Power';
+
+        var base = chipKey.replace(/-(?:pci|isa|virtual|acpi)-.+$/, '');
+        return humanizeSensorName(base);
+    }
+
+    function sensorReadingLabel(chipKey, label, readingType) {
+        var source = sensorSourceLabel(chipKey);
+        var genericPattern = readingType === 'power' ? /^power\d+$/i : /^temp\d+$/i;
+        return genericPattern.test(label) ? source : source + ' ' + label;
     }
 
     // ─── Combined Sensors Renderer ─────────────────────────────────
@@ -133,10 +166,12 @@
                    k.indexOf('k10temp-pci-')  === 0;
         });
 
-        cpuChips.forEach(function (chipKey) {
+        cpuChips.forEach(function (chipKey, chipIndex) {
             var chip = data[chipKey];
             var pkgTemp = null, pkgMax = null, pkgCrit = null;
+            var pkgLabel = null;
             var coreTemps = [];
+            var cpuLabel = cpuChips.length > 1 ? 'CPU ' + (chipIndex + 1) : 'CPU';
 
             Object.keys(chip).forEach(function (label) {
                 if (label === 'Adapter') return;
@@ -156,6 +191,7 @@
                 if (temp === null || temp === undefined) return;
 
                 if (/Package|Tctl|Tdie/i.test(label)) {
+                    pkgLabel = label;
                     pkgTemp = temp;
                     pkgMax  = maxKey  ? sensor[maxKey]  : null;
                     pkgCrit = critKey ? sensor[critKey] : null;
@@ -169,10 +205,17 @@
                 }
             });
 
+            if (cpuChips.length > 1 && pkgLabel) {
+                var packageMatch = pkgLabel.match(/Package\s+id\s+(\d+)/i);
+                if (packageMatch) cpuLabel = 'CPU ' + (parseInt(packageMatch[1], 10) + 1);
+            }
+
             if (pkgTemp !== null) {
                 var color = tempColor(pkgTemp, pkgMax, pkgCrit, colors);
-                var txt = 'CPU: ' + formatTemp(pkgTemp);
-                if (coreTemps.length > 0) txt += ' (' + coreTemps.length + ' cores)';
+                var txt = cpuLabel + ': ' + formatTemp(pkgTemp);
+                if (coreTemps.length > 0) {
+                    txt += ' (' + coreTemps.length + ' core' + (coreTemps.length === 1 ? '' : 's') + ')';
+                }
                 sections.push(tag(txt, color));
             } else if (coreTemps.length > 0) {
                 if (activeSensorFilter) {
@@ -184,7 +227,7 @@
                 } else {
                     var maxT = Math.max.apply(null, coreTemps.map(function (c) { return c.temp; }));
                     var color = tempColor(maxT, 80, 95, colors);
-                    sections.push(tag('CPU: ' + formatTemp(maxT) + ' peak (' + coreTemps.length + ' cores)', color));
+                    sections.push(tag(cpuLabel + ': ' + formatTemp(maxT) + ' peak (' + coreTemps.length + ' cores)', color));
                 }
             }
         });
@@ -249,6 +292,47 @@
             });
         });
 
+        // ── Additional Temperatures ──────────────────────────────
+        // Cover lm-sensors chips outside the specialized CPU/NVMe/HDD
+        // renderers, such as PCH, ACPI, and network-adapter sensors.
+        Object.keys(data).forEach(function (chipKey) {
+            var isCpuChip = chipKey.indexOf('coretemp-isa-') === 0 ||
+                chipKey.indexOf('k10temp-pci-') === 0;
+            var isHddChip = chipKey.indexOf('drivetemp-scsi-') === 0;
+            if (isCpuChip || isHddChip) return;
+
+            var chip = data[chipKey];
+            if (!chip || typeof chip !== 'object') return;
+
+            Object.keys(chip).forEach(function (label) {
+                if (label === 'Adapter') return;
+                if (!isSensorAllowed(chipKey, label)) return;
+                if (chipKey.indexOf('nvme-pci-') === 0 && label === 'Composite') return;
+
+                var sensor = chip[label];
+                if (!sensor || typeof sensor !== 'object') return;
+
+                var inputKey = Object.keys(sensor).filter(function (key) {
+                    return /^temp\d+_input$/.test(key);
+                })[0];
+                if (!inputKey) return;
+
+                var temp = sensor[inputKey];
+                if (temp === null || temp === undefined || isNaN(temp)) return;
+
+                var prefix = inputKey.replace(/_input$/, '');
+                var max = sensor[prefix + '_max'];
+                var crit = sensor[prefix + '_crit'];
+                var color = tempColor(
+                    temp,
+                    max === undefined ? null : max,
+                    crit === undefined ? null : crit,
+                    colors
+                );
+                sections.push(tag(sensorReadingLabel(chipKey, label, 'temp') + ': ' + formatTemp(temp), color));
+            });
+        });
+
         // ── Fan Speeds ──────────────────────────────────────────
         var fans = [];
         function findFans(obj, parentLabel, chipKey) {
@@ -278,6 +362,31 @@
                 sections.push(tag(fan.label + ': ' + rpm + ' RPM', color));
             });
         }
+
+        // ── Power Meters ────────────────────────────────────
+        Object.keys(data).forEach(function (chipKey) {
+            var chip = data[chipKey];
+            if (!chip || typeof chip !== 'object') return;
+
+            Object.keys(chip).forEach(function (label) {
+                if (label === 'Adapter') return;
+                if (!isSensorAllowed(chipKey, label)) return;
+
+                var sensor = chip[label];
+                if (!sensor || typeof sensor !== 'object') return;
+
+                var powerKeys = Object.keys(sensor).filter(function (key) {
+                    return /^power\d+_(?:average|input)$/.test(key);
+                }).sort(function (a, b) {
+                    return (/_average$/.test(a) ? 0 : 1) - (/_average$/.test(b) ? 0 : 1);
+                });
+                if (!powerKeys.length) return;
+
+                var watts = sensor[powerKeys[0]];
+                if (watts === null || watts === undefined || isNaN(watts)) return;
+                sections.push(tag(sensorReadingLabel(chipKey, label, 'power') + ': ' + formatPower(watts), colors.text));
+            });
+        });
 
         // ── Join all sections ───────────────────────────────────
         if (sections.length === 0) return tag('No sensors detected', colors.textDim);
@@ -446,14 +555,14 @@
             });
         };
 
-        console.log('[ProxMorph] Sensor widget initialized (v1.1.0)');
+        console.log('[ProxMorph] Sensor widget initialized (v1.3.0)');
     }
 
     // ─── Init ──────────────────────────────────────────────────────
     function init() {
         try {
             applyOverride();
-            window.ProxMorphSensors = { version: '1.1.0' };
+            window.ProxMorphSensors = { version: '1.3.0' };
         } catch (e) {
             console.error('[ProxMorph Sensors] Init error:', e);
         }

@@ -154,7 +154,7 @@ Checksum verification still runs, against your mirrored `SHA256SUMS`.
 
 ### Hardware sensor setup (PVE)
 
-The guided install now asks one informed sensor question. If accepted, ProxMorph installs `lm-sensors` noninteractively when it is missing, uses existing readings when they are already available, and runs `sensors-detect --auto` only when detection is still required. The automatic detector probes hardware and cannot be guaranteed safe on every system, so this remains an explicit opt-in rather than an unattended default. Sensor filtering no longer adds another installation question; all readings are shown initially and can be narrowed later with `./install.sh sensors configure`.
+The guided install now asks one informed sensor question. If accepted, ProxMorph installs `lm-sensors` noninteractively when it is missing, uses existing readings when they are already available, and runs `sensors-detect --auto` only when detection is still required. The automatic detector probes hardware and cannot be guaranteed safe on every system, so this remains an explicit opt-in rather than an unattended default. Sensor filtering no longer adds another installation question; all readings are shown initially and can be narrowed later with `./install.sh sensors configure`. The compact node Summary row supports CPU packages, chipset and NIC temperatures, NVMe and SATA temperatures, fan speeds, power meters, and optional NUT UPS data. Multi-socket CPU packages are labeled individually.
 
 On a cluster, the separate remote-node confirmation remains because it modifies other hosts. Each node still needs its own usable `lm-sensors` runtime; ProxMorph only deploys the version-matched API patch and selected filter to remote nodes.
 

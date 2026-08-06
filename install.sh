@@ -15,7 +15,7 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Configuration
-VERSION="2.20.3"
+VERSION="2.20.4"
 TARGET_VERSION="$VERSION"
 WIDGET_TOOLKIT_DIR="/usr/share/javascript/proxmox-widget-toolkit"
 THEMES_DIR="${WIDGET_TOOLKIT_DIR}/themes"
@@ -2884,7 +2884,7 @@ detect_sensors() {
     fi
 
     # Report detected sensors
-    local has_cpu=false has_nvme=false has_hdd=false has_fan=false has_ups=false
+    local has_cpu=false has_nvme=false has_hdd=false has_misc_temp=false has_power=false has_fan=false has_ups=false
 
     echo "$sensor_output" | grep -q '"coretemp-isa-\|"k10temp-pci-' && has_cpu=true
     echo "$sensor_output" | grep -q '"nvme-pci-' && has_nvme=true
@@ -2892,15 +2892,45 @@ detect_sensors() {
     echo "$sensor_output" | grep -q 'fan[0-9]*_input' && has_fan=true
     command -v upsc &> /dev/null && has_ups=true
 
+    local extra_sensor_flags
+    extra_sensor_flags=$(printf '%s' "$sensor_output" | python3 -c '
+import json,re,sys
+try:
+    data=json.load(sys.stdin)
+except Exception:
+    print("0 0")
+    raise SystemExit
+has_temp=False
+has_power=False
+special=("coretemp-isa-", "k10temp-pci-", "nvme-pci-", "drivetemp-scsi-")
+for chip_key,chip in data.items():
+    if not isinstance(chip,dict):
+        continue
+    for label,reading in chip.items():
+        if label == "Adapter" or not isinstance(reading,dict):
+            continue
+        if not chip_key.startswith(special) and any(re.match(r"^temp\d+_input$", key) for key in reading):
+            has_temp=True
+        if any(re.match(r"^power\d+_(?:average|input)$", key) for key in reading):
+            has_power=True
+print(int(has_temp), int(has_power))
+' 2>/dev/null) || extra_sensor_flags="0 0"
+    local has_misc_temp_flag has_power_flag
+    read -r has_misc_temp_flag has_power_flag <<< "$extra_sensor_flags"
+    [[ "$has_misc_temp_flag" == "1" ]] && has_misc_temp=true
+    [[ "$has_power_flag" == "1" ]] && has_power=true
+
     echo ""
     print_info "Detected hardware sensors:"
     [[ "$has_cpu"  == "true" ]] && echo -e "  ${GREEN}●${NC} CPU temperature (coretemp/k10temp)"
     [[ "$has_nvme" == "true" ]] && echo -e "  ${GREEN}●${NC} NVMe drive temperature"
     [[ "$has_hdd"  == "true" ]] && echo -e "  ${GREEN}●${NC} HDD drive temperature (drivetemp)"
+    [[ "$has_misc_temp" == "true" ]] && echo -e "  ${GREEN}●${NC} Additional temperature sensors (chipset, NIC, ACPI)"
+    [[ "$has_power" == "true" ]] && echo -e "  ${GREEN}●${NC} Power meter"
     [[ "$has_fan"  == "true" ]] && echo -e "  ${GREEN}●${NC} Fan speed"
     [[ "$has_ups"  == "true" ]] && echo -e "  ${GREEN}●${NC} UPS monitoring (NUT)"
 
-    [[ "$has_cpu" == "false" && "$has_nvme" == "false" && "$has_hdd" == "false" && "$has_fan" == "false" ]] && {
+    [[ "$has_cpu" == "false" && "$has_nvme" == "false" && "$has_hdd" == "false" && "$has_misc_temp" == "false" && "$has_power" == "false" && "$has_fan" == "false" ]] && {
         print_warning "No supported sensors found in lm-sensors output"
         return 1
     }
@@ -2967,7 +2997,7 @@ enumerate_sensors() {
     # Parse JSON with awk to extract chip keys, labels, and values
     # CPU chips (coretemp, k10temp)
     local cpu_chips
-    cpu_chips=$(echo "$sensor_output" | grep -oP '"(coretemp-isa-[^"]+|k10temp-pci-[^"]+)"' | tr -d '"' | sort -u)
+    cpu_chips=$(echo "$sensor_output" | grep -oE '"(coretemp-isa-[^"]+|k10temp-pci-[^"]+)"' | tr -d '"' | sort -u)
     for chip in $cpu_chips; do
         # Get package/Tctl temp
         local temp
@@ -2994,7 +3024,7 @@ except: pass
 
     # NVMe drives
     local nvme_chips
-    nvme_chips=$(echo "$sensor_output" | grep -oP '"(nvme-pci-[^"]+)"' | tr -d '"' | sort -u)
+    nvme_chips=$(echo "$sensor_output" | grep -oE '"nvme-pci-[^"]+"' | tr -d '"' | sort -u)
     for chip in $nvme_chips; do
         local temp
         temp=$(echo "$sensor_output" | python3 -c "
@@ -3020,7 +3050,7 @@ except: pass
 
     # HDD/SATA drives
     local hdd_chips
-    hdd_chips=$(echo "$sensor_output" | grep -oP '"(drivetemp-scsi-[^"]+)"' | tr -d '"' | sort -u)
+    hdd_chips=$(echo "$sensor_output" | grep -oE '"drivetemp-scsi-[^"]+"' | tr -d '"' | sort -u)
     for chip in $hdd_chips; do
         local temp
         temp=$(echo "$sensor_output" | python3 -c "
@@ -3043,6 +3073,42 @@ except: pass
             done <<< "$temp"
         fi
     done
+
+    # Additional temperature and power sensors (chipset, NIC, ACPI, etc.)
+    local extra_data
+    extra_data=$(printf '%s' "$sensor_output" | python3 -c '
+import json,re,sys
+try:
+    data=json.load(sys.stdin)
+except Exception:
+    raise SystemExit
+special=("coretemp-isa-", "k10temp-pci-", "nvme-pci-", "drivetemp-scsi-")
+for chip_key,chip in data.items():
+    if not isinstance(chip,dict):
+        continue
+    for label,reading in chip.items():
+        if label == "Adapter" or not isinstance(reading,dict):
+            continue
+        if not chip_key.startswith(special):
+            temp_keys=[key for key in reading if re.match(r"^temp\d+_input$", key)]
+            if temp_keys:
+                value=reading.get(temp_keys[0])
+                if value is not None:
+                    print(f"Temp|{chip_key}|{label}|{value}°C")
+        power_keys=sorted(
+            (key for key in reading if re.match(r"^power\d+_(?:average|input)$", key)),
+            key=lambda key: 0 if key.endswith("_average") else 1,
+        )
+        if power_keys:
+            value=reading.get(power_keys[0])
+            if value is not None:
+                print(f"Power|{chip_key}|{label}|{value} W")
+' 2>/dev/null) || true
+    if [[ -n "$extra_data" ]]; then
+        while IFS='|' read -r type chip label val; do
+            SENSOR_LIST+=("${type}|${chip}|${label}|${val}")
+        done <<< "$extra_data"
+    fi
 
     # Fan sensors (any chip)
     local fan_data
