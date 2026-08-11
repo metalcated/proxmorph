@@ -13,7 +13,7 @@
  * protected API and the replicated Proxmox cluster filesystem. The selected
  * view itself continues to use Proxmox's native URL state.
  *
- * Version: 1.9.4
+ * Version: 1.9.5
  */
 (function () {
     'use strict';
@@ -24,7 +24,7 @@
     var CONNECTIVITY_VIEW_KEY = 'proxmorph-connectivity';
     var VNET_TYPE = 'proxmorph-vnet';
     var VNETS_URL = '/cluster/sdn/vnets';
-    var VERSION = '1.9.4';
+    var VERSION = '1.9.5';
     var PREFERENCES_URL = '/proxmorph/preferences';
     var MAX_INIT_ATTEMPTS = 40;
     var initAttempts = 0;
@@ -1433,7 +1433,7 @@
                 '  width: 34px !important;',
                 '}',
                 '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-pressed { border-color: var(--pm-border, var(--gh-border-default, rgba(127, 127, 127, 0.42))) !important; }',
-                '.x-keyboard-mode .pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-focus { outline: 2px solid var(--pm-accent, var(--gh-accent-fg, var(--pwt-text-color, rgba(127, 127, 127, 0.7)))) !important; outline-offset: 1px; }',
+                '.x-keyboard-mode .pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-focus { outline: 1px solid var(--pm-focus-border, var(--pm-accent, var(--gh-accent-fg, var(--pwt-text-color, rgba(127, 127, 127, 0.7))))) !important; outline-offset: 1px; }',
                 '.pmx-view-nav-button .x-btn-wrap, .pmx-view-nav-button .x-btn-button { align-items: center !important; background-color: transparent !important; background-image: none !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; box-sizing: border-box !important; display: flex !important; height: 100% !important; justify-content: center !important; margin: 0 !important; padding: 0 !important; width: 100% !important; }',
                 '.pmx-view-nav-button .x-btn-inner { display: none !important; width: 0 !important; }',
                 '.pmx-view-nav-button .x-btn-icon-el { align-items: center !important; display: inline-flex !important; flex: 0 0 16px !important; font-size: 16px !important; height: 16px !important; justify-content: center !important; line-height: 16px !important; margin: 0 !important; position: static !important; transform: none !important; width: 16px !important; }',
@@ -1468,7 +1468,7 @@
                 'html.proxmorph-text-default { --proxmorph-ui-size: 13px; --proxmorph-ui-line-height: 18px; --proxmorph-control-font-size: 13px; --proxmorph-data-row-height: 32px; }',
                 'html.proxmorph-text-comfortable { --proxmorph-ui-size: 14px; --proxmorph-ui-line-height: 20px; --proxmorph-control-font-size: 14px; --proxmorph-data-row-height: 34px; }',
                 'html.proxmorph-text-large { --proxmorph-ui-size: 15px; --proxmorph-ui-line-height: 22px; --proxmorph-control-font-size: 14px; --proxmorph-data-row-height: 36px; }',
-                'html { --proxmorph-control-height: 30px; --proxmorph-data-row-height: 32px; --proxmorph-control-radius: var(--pm-radius-md, 6px); --proxmorph-control-padding: 10px; --proxmorph-modern-divider: color-mix(in srgb, var(--pm-border, var(--gh-border-default, #68707a)) 72%, transparent); --proxmorph-modern-hover: var(--pm-bg-elevated, var(--gh-canvas-subtle, rgba(127, 127, 127, 0.14))); --proxmorph-modern-selected: color-mix(in srgb, var(--pm-accent, var(--gh-accent-fg, #006eff)) 11%, transparent); }',
+                'html { --proxmorph-control-height: 30px; --proxmorph-data-row-height: 32px; --proxmorph-control-radius: var(--pm-radius-md, 6px); --proxmorph-control-padding: 10px; --proxmorph-modern-divider: color-mix(in srgb, var(--pm-border, var(--gh-border-default, #68707a)) 72%, transparent); --proxmorph-modern-hover: var(--pm-bg-elevated, var(--gh-canvas-subtle, rgba(127, 127, 127, 0.14))); --proxmorph-modern-selected: var(--pm-row-selected, color-mix(in srgb, var(--pm-accent, var(--gh-accent-fg, #006eff)) 11%, transparent)); }',
                 'html[class*="proxmorph-text-"] .x-grid-item, html[class*="proxmorph-text-"] .x-grid-cell-inner, html[class*="proxmorph-text-"] .x-tree-node-text, html[class*="proxmorph-text-"] .x-treelist-item-text, html[class*="proxmorph-text-"] .x-form-display-field, html[class*="proxmorph-text-"] .x-form-display-field-default, html[class*="proxmorph-text-"] .x-menu-item-text, html[class*="proxmorph-text-"] .x-menu-item-text-default, html[class*="proxmorph-text-"] .x-boundlist-item, html[class*="proxmorph-text-"] .x-tip-body, html[class*="proxmorph-text-"] .x-tip-body-default, html[class*="proxmorph-text-"] .x-grid-empty, html[class*="proxmorph-text-"] .x-progress-text, html[class*="proxmorph-text-"] .x-fieldset-header-text { font-size: var(--proxmorph-ui-size) !important; }',
                 'html[class*="proxmorph-text-"] .x-btn-inner, html[class*="proxmorph-text-"] .x-btn-inner-default-small, html[class*="proxmorph-text-"] .x-btn-inner-default-toolbar-small, html[class*="proxmorph-text-"] .x-form-item-label, html[class*="proxmorph-text-"] .x-form-item-label-default, html[class*="proxmorph-text-"] .x-form-cb-label-default, html[class*="proxmorph-text-"] .x-form-text, html[class*="proxmorph-text-"] .x-form-text-default, html[class*="proxmorph-text-"] .x-tab-inner, html[class*="proxmorph-text-"] .x-tab-inner-default, html[class*="proxmorph-text-"] .x-toolbar-text, html[class*="proxmorph-text-"] .x-toolbar-text-default, html[class*="proxmorph-text-"] .x-column-header-text, html[class*="proxmorph-text-"] .x-column-header-text-default, html[class*="proxmorph-text-"] .x-tagfield-item-text, html[class*="proxmorph-text-"] .x-tagfield-input-field, html[class*="proxmorph-text-"] .proxmox-tag-dark, html[class*="proxmorph-text-"] .proxmox-tag-light, html[class*="proxmorph-text-"] .pve-edit-tag { font-size: var(--proxmorph-control-font-size) !important; }',
                 'html[class*="proxmorph-text-"] .x-grid-cell-inner, html[class*="proxmorph-text-"] .x-tree-node-text, html[class*="proxmorph-text-"] .x-form-display-field, html[class*="proxmorph-text-"] .x-menu-item-text, html[class*="proxmorph-text-"] .x-boundlist-item, html[class*="proxmorph-text-"] .x-tip-body { line-height: var(--proxmorph-ui-line-height) !important; }',
@@ -1519,7 +1519,7 @@
                 'html body .x-form-trigger-wrap-default { background-color: var(--pm-bg-surface, var(--gh-canvas-muted)) !important; border: 1px solid var(--proxmorph-modern-divider) !important; border-radius: var(--proxmorph-control-radius) !important; box-shadow: none !important; height: var(--proxmorph-control-height) !important; min-height: var(--proxmorph-control-height) !important; }',
                 'html body .x-form-trigger-wrap-default .x-form-text-default { box-sizing: border-box !important; height: calc(var(--proxmorph-control-height) - 2px) !important; line-height: calc(var(--proxmorph-control-height) - 2px) !important; padding-top: 0 !important; padding-bottom: 0 !important; }',
                 'html body .x-form-trigger-wrap-default .x-form-trigger-default { height: calc(var(--proxmorph-control-height) - 2px) !important; }',
-                'html body .x-form-trigger-wrap-default.x-form-trigger-wrap-focus { border-color: var(--pm-accent, var(--gh-accent-fg, #006eff)) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--pm-accent, var(--gh-accent-fg, #006eff)) 18%, transparent) !important; }',
+                'html body .x-form-trigger-wrap-default.x-form-trigger-wrap-focus { border-color: var(--pm-focus-border, var(--pm-accent, var(--gh-accent-fg, #006eff))) !important; box-shadow: 0 0 0 3px var(--pm-focus-ring, color-mix(in srgb, var(--pm-accent, var(--gh-accent-fg, #006eff)) 18%, transparent)) !important; }',
             ].join('\n')),
             'proxmorph-inventory-navigation-style',
         );
@@ -1625,6 +1625,7 @@
             itemId: 'proxmorphViewNavigation',
             cls: 'pmx-view-nav',
             hidden: !settings.useIconNavigation,
+            margin: '0 0 0 4',
             layout: {
                 type: 'hbox',
                 align: 'stretch',
@@ -1647,7 +1648,7 @@
             iconCls: 'fa fa-fw fa-sitemap x-btn-icon-el-default-toolbar-small',
             tooltip: 'Inventory, appearance, and console settings',
             ariaLabel: 'Inventory, appearance, and console settings',
-            margin: '0 0 0 3',
+            margin: '0 0 0 4',
             handler: function () {
                 createSettingsWindow(viewSelector, resourceTree);
             },

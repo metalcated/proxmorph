@@ -23,7 +23,7 @@ assert.match(pdm, /^\/\*!Enterprise Slate\*\//, 'PDM exposes the public theme ti
     ['--pm-bg-surface:', '#22343c'],
     ['--pm-border:', '#485764'],
     ['--pm-text:', '#e9ecef'],
-    ['--pm-accent:', '#00a6d6'],
+    ['--pm-accent:', '#0f789c'],
 ].forEach(([token, value]) => {
     assert.ok(pve.includes(`${token} ${value}`), `PVE defines ${token} as ${value}`);
     assert.ok(pdm.includes(`${token} ${value}`), `PDM defines ${token} as ${value}`);
@@ -46,13 +46,28 @@ assert.match(
 );
 assert.match(
     pve,
-    /\.x-grid-item-selected \.x-grid-cell:first-child[^{]*\{[^}]*inset 3px 0 0 var\(--pm-accent\)/s,
-    'selected data rows use one narrow leading status signal',
+    /\.x-grid-item-selected \.x-grid-cell:first-child[^{]*\{[^}]*box-shadow: none !important;/s,
+    'selected data rows use a quiet surface without an accent border',
 );
 assert.match(
     pve,
-    /\.x-treelist-item-selected > \.x-treelist-row::before[^{]*\{[^}]*background: var\(--pm-row-selected\) !important;[^}]*inset 3px 0 0 var\(--pm-accent\)/s,
-    'object navigation uses a quiet full-row selection and leading signal',
+    /\.x-treelist-item-selected > \.x-treelist-row::before[^{]*\{[^}]*background: var\(--pm-row-selected\) !important;[^}]*box-shadow: none !important;/s,
+    'object navigation uses a quiet full-row selection without a cyan leading edge',
+);
+assert.match(
+    pve,
+    /\[id\^="proxmoxHelpButton-"\][^{]*\{[^}]*border-color: var\(--pm-action-outline\) !important;/s,
+    'Documentation keeps a restrained dark action outline while stationary',
+);
+assert.match(
+    pve,
+    /\.x-tab-default\.x-tab\.x-tab-active::after[^{]*\{[^}]*content: none !important;[^}]*display: none !important;/s,
+    'selected tabs do not draw an accent edge',
+);
+assert.match(
+    pve,
+    /\.x-keyboard-mode \.x-grid-item-focused[^{]*\{[^}]*outline: none !important;/s,
+    'focused grid rows do not gain a cyan perimeter',
 );
 assert.match(
     pve,
@@ -72,8 +87,8 @@ assert.match(
 
 assert.match(
     pdm,
-    /--pwt-color-primary-60: rgb\(0, 166, 214\) !important;/,
-    'PDM maps its primary tonal system to Enterprise Slate cyan',
+    /--pwt-color-primary-60: rgb\(15, 120, 156\) !important;/,
+    'PDM maps its primary tonal system to the restrained Enterprise Slate action color',
 );
 assert.match(
     pdm,
@@ -87,8 +102,13 @@ assert.match(
 );
 assert.match(
     pdm,
-    /\.pwt-nav-link\[aria-current="page"\][^{]*\{[^}]*var\(--pm-row-selected\)[^}]*inset 3px 0 0 var\(--pm-accent\)/s,
-    'PDM navigation uses the same selected-row language as PVE',
+    /\.pwt-nav-link\[aria-current="page"\][^{]*\{[^}]*var\(--pm-row-selected\)[^}]*box-shadow: none !important;/s,
+    'PDM navigation uses the same borderless selected-row language as PVE',
+);
+assert.match(
+    pdm,
+    /\.pwt-tab-active-indicator[^{]*\{[^}]*background: transparent !important;[^}]*height: 0 !important;/s,
+    'PDM selected tabs omit the cyan indicator edge',
 );
 assert.match(
     pdm,

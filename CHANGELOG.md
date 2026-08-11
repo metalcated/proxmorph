@@ -8,7 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
-- **Enterprise Slate flagship theme**: adds a professional vCenter/Clarity-inspired workspace for PVE, PBS, and PDM with a blue-gray command shell, dense inventory hierarchy, quiet full-row selection, restrained cyan actions, flatter panels, compact menus, coordinated telemetry colors, deliberate typography, keyboard focus states, and reduced-motion support. The implementation uses ProxMorph's current ExtJS/PWT contracts and original assets rather than obsolete vCenter selectors or VMware artwork.
+- **Enterprise Slate flagship theme**: adds a professional vCenter/Clarity-inspired workspace for PVE, PBS, and PDM with a blue-gray command shell, dense inventory hierarchy, quiet full-row selection, restrained dark cyan-blue actions, flatter panels, compact menus, coordinated telemetry colors, deliberate typography, keyboard focus states, and reduced-motion support. The implementation uses ProxMorph's current ExtJS/PWT contracts and original assets rather than obsolete vCenter selectors or VMware artwork.
 - **Proxmox VE 9.2.6+ compatibility preflight**: validates the package version and every patched runtime contract (`proxmoxlib.js` theme map, index loader/insertion point, and `Nodes.pm` sensor anchor) before modifying Proxmox-owned files. Future versions with unchanged contracts remain supported; changed layouts fail closed.
 - **Inventory View for PVE**: adds optional node → resource pool → guest and resource pool → guest hierarchies, plus a modal for showing or hiding VMs, containers, templates, storage, SDN/network resources, stopped guests, and grouping. Includes expand/collapse actions and uses no new browser-local persistence.
 - **vCenter-style icon navigation**: optionally replaces the native view picker with Datacenter, Inventory, Storage, and Connectivity icons. Each icon uses the same compact, transparent 34×28 toolbar-button treatment as the surrounding native controls, with explicit optical centering, an accessible name, and a hierarchy tooltip; the controls retain native Proxmox resource routing, with narrowly scoped presentation records only for cluster-wide vNets omitted from the native resource feed.
@@ -26,7 +26,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **No-write dry run**: accepts `--dry-run` before or after supported commands; validates runtime and backup integrity, resolves restore IDs, and previews planned backup/file/package/service/remote-node actions without creating even an operation lock.
 
 ### Changed
-- Bumped the installer version to 2.21.1.
+- Bumped the installer version to 2.21.2.
+- **Enterprise Slate interaction palette**: reserves its darker cyan-blue for primary actions, links, meters, and deliberate hover states. Selection surfaces are now neutral blue-gray, form and keyboard focus use a slate border, and the stationary Documentation action keeps a restrained dark outline.
 - **Transactional novnc-pve coverage**: compatibility preflight, dry run, full backup/restore, uninstall, package-version guards, and the APT update hook now cover the noVNC template and ProxMorph console assets.
 - **Simplified PVE sensor setup**: replaces the manual `apt install lm-sensors && sensors-detect` prerequisite and sensor-filter follow-up with one informed opt-in. ProxMorph installs `lm-sensors` noninteractively, reuses existing readings, and only runs `sensors-detect --auto` when required; individual filtering remains available through `sensors configure`.
 - **Sensor package rollback**: backups now record optional `lm-sensors` state and ownership. Transaction rollback, restore, and uninstall reinstate or remove the package as needed while retaining a copy that existed before ProxMorph.
@@ -35,6 +36,8 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Interactive menu actions now return to the main menu after success, cancellation, or failure instead of ending the installer; command-line subcommands remain one-shot.
 
 ### Fixed
+- **Uniform icon-switcher rhythm**: gives the native Tree Settings-to-Datacenter gap and Connectivity-to-settings gap the same 4 px spacing already used between the four view buttons.
+- **Enterprise Slate selection edges**: removes the cyan leading borders from data rows, resource inventory, object navigation, and PDM lists; removes active-tab edge indicators; and prevents grid focus from drawing a clipped cyan top/right perimeter.
 - **Cross-theme icon switcher alignment**: gives the native Tree Settings button, four view shortcuts, and ProxMorph settings button the same 34×28 geometry, removes inherited inner-wrapper padding and borders, centers every Font Awesome glyph in a fixed 16×16 optical box, and compensates for glyph-shape differences without theme-specific offsets.
 - **Stock-theme style isolation**: scopes account typography and the shared PVE modernization layer to stylesheets that expose ProxMorph semantic theme tokens. Proxmox's native Default, Light, and Dark themes retain their original account menu, controls, grids, tabs, colors, and spacing after ProxMorph is installed.
 - **Expanded hardware sensor coverage**: displays selected chipset, NIC, ACPI, additional NVMe temperature, and power-meter readings instead of silently ignoring them. Sensor detection and configuration list those readings, and multi-socket CPU packages are labeled individually.

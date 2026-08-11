@@ -2,7 +2,7 @@
 /*
  * ProxMorph Theme: Enterprise Slate
  * A professional, vCenter/Clarity-inspired virtualization workspace
- * Version: 1.0.0
+ * Version: 1.1.0
  *
  * Built on ProxMorph's audited PVE/PBS ExtJS component coverage, then
  * reshaped around enterprise-console density, hierarchy, and restrained
@@ -10,9 +10,9 @@
  * it does not contain VMware artwork or source styles.
  *
  * --- Enterprise Slate Palette ---
- * Accent:       #00a6d6    Accent Light: #4cc7eb    Accent Dark: #007ca8
+ * Accent:       #0f789c    Accent Light: #2b8fae    Accent Dark: #0a5a76
  * Success:      #34c759    Warning:      #f4b942    Error:       #e05252
- * Info:         #39b9d6
+ * Info:         #2b8fae
  * BG Base:      #1b2a32    BG Surface:   #22343c    BG Elevated: #2b414c
  * Text:         #e9ecef    Text Dim:     #c7d1d8    Text Muted:  #adbbc4
  * Border:       #485764    Border Sub:   #2b414c
@@ -20,13 +20,13 @@
 
 /* ===== CSS VARIABLES ===== */
 :root {
-    --pm-accent: #00a6d6;
-    --pm-accent-light: #4cc7eb;
-    --pm-accent-dark: #007ca8;
+    --pm-accent: #0f789c;
+    --pm-accent-light: #2b8fae;
+    --pm-accent-dark: #0a5a76;
     --pm-success: #34c759;
     --pm-warning: #f4b942;
     --pm-error: #e05252;
-    --pm-info: #39b9d6;
+    --pm-info: #2b8fae;
     --pm-bg-base: #1b2a32;
     --pm-bg-surface: #22343c;
     --pm-bg-elevated: #2b414c;
@@ -38,8 +38,10 @@
     --pm-shell: #31485a;
     --pm-shell-border: #3f596b;
     --pm-row-hover: rgba(72, 87, 100, 0.24);
-    --pm-row-selected: rgba(0, 166, 214, 0.16);
-    --pm-focus-ring: rgba(76, 199, 235, 0.42);
+    --pm-row-selected: rgba(72, 104, 120, 0.34);
+    --pm-focus-ring: rgba(143, 160, 171, 0.34);
+    --pm-focus-border: #708490;
+    --pm-action-outline: #287d9b;
     --pm-font-ui: "Clarity City", Metropolis, "Avenir Next", Avenir,
         "Segoe UI Variable", "Segoe UI", system-ui, -apple-system,
         BlinkMacSystemFont, Arial, sans-serif;
@@ -60,9 +62,9 @@
 
     --pm-on-accent: #1b2a32;
     --pm-hover-overlay: rgba(72, 87, 100, 0.15);
-    --pm-select-overlay: rgba(0, 166, 214, 0.25);
-    --pm-accent-muted: rgba(0, 166, 214, 0.4);
-    --pm-accent-subtle: rgba(0, 166, 214, 0.15);
+    --pm-select-overlay: rgba(72, 104, 120, 0.34);
+    --pm-accent-muted: rgba(15, 120, 156, 0.54);
+    --pm-accent-subtle: rgba(15, 120, 156, 0.18);
 
     color-scheme: dark;
 }
@@ -597,7 +599,7 @@ div[id^="pveResourceTree"] .x-grid-cell {
 }
 
 .x-keyboard-mode .x-splitter-focus::after {
-    border-color: var(--pm-accent) !important;
+    border-color: var(--pm-focus-border) !important;
 }
 
 .x-layout-split-bottom {
@@ -1930,7 +1932,7 @@ a.x-monthpicker-item-inner:hover, div.x-datepicker-date:hover {
 
 /* ===== SELECTION HIGHLIGHT ===== */
 ::selection {
-    background-color: rgba(0, 166, 214, 0.3);
+    background-color: rgba(15, 120, 156, 0.3);
     color: var(--pm-text);
 }
 
@@ -2063,8 +2065,8 @@ body > .x-plain[role="region"]:has(#versioninfo) .x-box-target {
     color: var(--pm-text-muted) !important;
 }
 
-body > .x-plain[role="region"]:has(#versioninfo) .x-btn-default-small,
-body > .x-plain[role="region"]:has(#versioninfo) .proxmox-inline-button {
+body > .x-plain[role="region"]:has(#versioninfo) .proxmox-inline-button,
+body > .x-plain[role="region"]:has(#versioninfo) #userinfo {
     background: rgba(16, 31, 39, 0.22) !important;
     border: 1px solid rgba(199, 209, 216, 0.26) !important;
     box-shadow: none !important;
@@ -2076,15 +2078,20 @@ body > .x-plain[role="region"]:has(#versioninfo) .x-btn-default-small .x-btn-ico
     font-weight: 500 !important;
 }
 
-body > .x-plain[role="region"]:has(#versioninfo) .x-btn-default-small.x-btn-over,
-body > .x-plain[role="region"]:has(#versioninfo) .proxmox-inline-button:hover {
-    background: rgba(76, 199, 235, 0.12) !important;
-    border-color: rgba(76, 199, 235, 0.58) !important;
+body > .x-plain[role="region"]:has(#versioninfo) [id^="proxmoxHelpButton-"] {
+    background: rgba(15, 120, 156, 0.08) !important;
+    border-color: var(--pm-action-outline) !important;
+}
+
+body > .x-plain[role="region"]:has(#versioninfo) .proxmox-inline-button:hover,
+body > .x-plain[role="region"]:has(#versioninfo) #userinfo.x-btn-over {
+    background: rgba(43, 143, 174, 0.14) !important;
+    border-color: var(--pm-accent-light) !important;
 }
 
 body > .x-plain[role="region"]:has(#versioninfo) #userinfo.x-btn-menu-active {
-    background: rgba(76, 199, 235, 0.16) !important;
-    border-color: var(--pm-accent-light) !important;
+    background: var(--pm-row-selected) !important;
+    border-color: var(--pm-border) !important;
 }
 
 /* ===== WORKSPACE STRUCTURE ===== */
@@ -2230,7 +2237,7 @@ body > .x-plain[role="region"]:has(#versioninfo) #userinfo.x-btn-menu-active {
 }
 
 .x-grid-item-selected .x-grid-cell:first-child {
-    box-shadow: inset 3px 0 0 var(--pm-accent) !important;
+    box-shadow: none !important;
 }
 
 /* ===== RESOURCE INVENTORY ===== */
@@ -2252,7 +2259,7 @@ body > .x-plain[role="region"]:has(#versioninfo) #userinfo.x-btn-menu-active {
 }
 
 [id^="pveResourceTree-"] .x-grid-item-selected .x-grid-cell:first-child {
-    box-shadow: inset 3px 0 0 var(--pm-accent) !important;
+    box-shadow: none !important;
 }
 
 /* ===== OBJECT NAVIGATION ===== */
@@ -2279,7 +2286,7 @@ body > .x-plain[role="region"]:has(#versioninfo) #userinfo.x-btn-menu-active {
 .x-treelist-item-selected > .x-treelist-row::before,
 .x-treelist-item-selected > .x-treelist-row:hover::before {
     background: var(--pm-row-selected) !important;
-    box-shadow: inset 3px 0 0 var(--pm-accent) !important;
+    box-shadow: none !important;
 }
 
 .x-treelist-item-selected > .x-treelist-row .x-treelist-item-text,
@@ -2313,14 +2320,20 @@ body > .x-plain[role="region"]:has(#versioninfo) #userinfo.x-btn-menu-active {
 }
 
 .x-tab-default.x-tab.x-tab-active {
-    background: rgba(0, 166, 214, 0.07) !important;
+    background: var(--pm-row-selected) !important;
     border-radius: 0 !important;
 }
 
 .x-tab-default.x-tab.x-tab-active::after {
-    background: var(--pm-accent) !important;
-    border-radius: 0 !important;
-    height: 2px !important;
+    content: none !important;
+    display: none !important;
+    height: 0 !important;
+}
+
+.x-keyboard-mode .x-tab-default.x-tab-focus.x-tab-active::after {
+    content: none !important;
+    display: none !important;
+    height: 0 !important;
 }
 
 /* ===== MENUS, DIALOGS, AND FORMS ===== */
@@ -2378,7 +2391,7 @@ textarea.x-form-field {
 }
 
 .x-form-trigger-wrap-default.x-form-trigger-wrap-focus {
-    border-color: var(--pm-accent-light) !important;
+    border-color: var(--pm-focus-border) !important;
     box-shadow: 0 0 0 2px var(--pm-focus-ring) !important;
 }
 
@@ -2411,17 +2424,20 @@ textarea.x-form-field {
 }
 
 ::selection {
-    background: rgba(0, 166, 214, 0.32);
+    background: rgba(15, 120, 156, 0.3);
     color: var(--pm-text);
 }
 
 /* ===== ACCESSIBILITY AND MOTION ===== */
 .x-keyboard-mode .x-btn-focus,
 .x-keyboard-mode .x-form-trigger-wrap-focus,
-.x-keyboard-mode .x-tab-focus,
-.x-keyboard-mode .x-grid-item-focused {
-    outline: 2px solid var(--pm-accent-light) !important;
+.x-keyboard-mode .x-tab-focus {
+    outline: 1px solid var(--pm-focus-border) !important;
     outline-offset: 1px !important;
+}
+
+.x-keyboard-mode .x-grid-item-focused {
+    outline: none !important;
 }
 
 @media (prefers-reduced-motion: reduce) {

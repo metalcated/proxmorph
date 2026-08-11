@@ -2,30 +2,30 @@
 /*
  * ProxMorph PDM Theme: Enterprise Slate
  * vCenter/Clarity-inspired enterprise virtualization workspace
- * Version: 1.0.0
+ * Version: 1.1.0
  *
  * ─── Enterprise Slate Palette ──────────────────────────────────
- * Accent:   #00a6d6    Text:     #e9ecef
+ * Accent:   #0f789c    Text:     #e9ecef
  * Base:     #1b2a32    Surface:  #22343c
  * Elevated: #2b414c    Shell:    #31485a
  */
 
 :root {
-    /* Primary — action cyan (#00a6d6) */
+    /* Primary — restrained action cyan-blue (#0f789c) */
     --pwt-color-primary-100: rgb(255, 255, 255) !important;
-    --pwt-color-primary-99: rgb(247, 253, 255) !important;
-    --pwt-color-primary-95: rgb(218, 246, 255) !important;
-    --pwt-color-primary-90: rgb(184, 237, 249) !important;
-    --pwt-color-primary-80: rgb(117, 216, 237) !important;
-    --pwt-color-primary-70: rgb(76, 199, 235) !important;
-    --pwt-color-primary-60: rgb(0, 166, 214) !important;
-    --pwt-color-primary-50: rgb(0, 139, 181) !important;
-    --pwt-color-primary-40: rgb(0, 112, 148) !important;
-    --pwt-color-primary-30: rgb(0, 86, 115) !important;
-    --pwt-color-primary-20: rgb(0, 61, 83) !important;
-    --pwt-color-primary-15: rgb(0, 48, 66) !important;
-    --pwt-color-primary-10: rgb(0, 35, 49) !important;
-    --pwt-color-primary-5: rgb(0, 21, 31) !important;
+    --pwt-color-primary-99: rgb(244, 250, 252) !important;
+    --pwt-color-primary-95: rgb(219, 239, 246) !important;
+    --pwt-color-primary-90: rgb(184, 222, 234) !important;
+    --pwt-color-primary-80: rgb(125, 190, 210) !important;
+    --pwt-color-primary-70: rgb(68, 158, 187) !important;
+    --pwt-color-primary-60: rgb(15, 120, 156) !important;
+    --pwt-color-primary-50: rgb(13, 101, 132) !important;
+    --pwt-color-primary-40: rgb(10, 82, 108) !important;
+    --pwt-color-primary-30: rgb(7, 64, 85) !important;
+    --pwt-color-primary-20: rgb(4, 47, 63) !important;
+    --pwt-color-primary-15: rgb(3, 37, 50) !important;
+    --pwt-color-primary-10: rgb(2, 27, 37) !important;
+    --pwt-color-primary-5: rgb(1, 16, 23) !important;
     --pwt-color-primary-0: rgb(0, 0, 0) !important;
 
     /* Secondary — cool enterprise slate */
@@ -189,10 +189,12 @@ body {
     --pm-text: #e9ecef;
     --pm-text-dim: #c7d1d8;
     --pm-text-muted: #adbbc4;
-    --pm-accent: #00a6d6;
-    --pm-accent-light: #4cc7eb;
+    --pm-accent: #0f789c;
+    --pm-accent-light: #2b8fae;
+    --pm-focus-border: #708490;
+    --pm-focus-ring: rgba(143, 160, 171, 0.34);
     --pm-row-hover: rgba(72, 87, 100, 0.24);
-    --pm-row-selected: rgba(0, 166, 214, 0.16);
+    --pm-row-selected: rgba(72, 104, 120, 0.34);
     --pm-font-ui: "Clarity City", Metropolis, "Avenir Next", Avenir,
         "Segoe UI Variable", "Segoe UI", system-ui, -apple-system,
         BlinkMacSystemFont, Arial, sans-serif;
@@ -291,7 +293,7 @@ header,
 .pwt-datatable tbody tr.selected,
 .pwt-datatable tbody tr[aria-selected="true"] {
     background: var(--pm-row-selected) !important;
-    box-shadow: inset 3px 0 0 var(--pm-accent) !important;
+    box-shadow: none !important;
 }
 
 .pwt-dialog:not(.pwt-dropdown),
@@ -316,7 +318,8 @@ dialog {
 }
 
 .pwt-input:focus-within {
-    box-shadow: 0 0 0 2px rgba(76, 199, 235, 0.42) !important;
+    border-color: var(--pm-focus-border) !important;
+    box-shadow: 0 0 0 2px var(--pm-focus-ring) !important;
 }
 
 .pwt-meter,
@@ -325,12 +328,12 @@ dialog {
 }
 
 .pwt-tab-active-indicator {
-    background: var(--pm-accent) !important;
-    height: 2px !important;
+    background: transparent !important;
+    height: 0 !important;
 }
 
 ::selection {
-    background: rgba(0, 166, 214, 0.32);
+    background: rgba(15, 120, 156, 0.3);
     color: var(--pm-text);
 }
 

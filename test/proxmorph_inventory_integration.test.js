@@ -385,7 +385,9 @@ assert.ok(
 );
 assert.equal(navigation.itemId, 'proxmorphViewNavigation');
 assert.equal(navigation.hidden, true, 'icon navigation is opt-in');
+assert.equal(navigation.margin, '0 0 0 4', 'the native gear and first view icon have the same gap');
 assert.equal(selector.hidden, false, 'native picker remains visible by default');
+assert.equal(settingsButton.margin, '0 0 0 4', 'the last view icon and settings button have the same gap');
 assert.equal(navigationStyle.id, 'proxmorph-inventory-navigation-style');
 assert.deepEqual(
     [...documentClasses].sort(),
@@ -655,6 +657,16 @@ assert.match(
     navigationStyle.css,
     /html\.proxmorph-theme-active\.proxmorph-text-large \{[^}]*--proxmorph-ui-size: 15px;[^}]*--proxmorph-control-font-size: 14px;/,
     'large content text keeps compact toolbar labels within the stable ExtJS geometry',
+);
+assert.match(
+    navigationStyle.css,
+    /--proxmorph-modern-selected: var\(--pm-row-selected, color-mix/,
+    'the shared modernization layer prefers a theme-defined neutral selection surface',
+);
+assert.match(
+    navigationStyle.css,
+    /\.x-form-trigger-wrap-default\.x-form-trigger-wrap-focus[^}]*var\(--pm-focus-border,[^}]*var\(--pm-focus-ring,/,
+    'themes can provide neutral form-focus borders without changing their action accent',
 );
 assert.match(
     navigationStyle.css,
