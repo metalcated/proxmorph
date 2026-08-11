@@ -162,6 +162,8 @@ On a cluster, the separate remote-node confirmation remains because it modifies 
 
 ProxMorph adds an optional **Inventory View** to the resource-tree selector. It keeps Proxmox's native records, permissions, navigation, and resource pools. The modal can present guests in either hierarchy:
 
+Inventory controls remain available with Proxmox's stock themes, but account typography and the shared modernization layer activate only when a ProxMorph theme is selected. Choosing Proxmox Default, Light, or Dark therefore preserves the native component styling.
+
 ```text
 Datacenter
 └── Node

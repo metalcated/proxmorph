@@ -15,6 +15,7 @@ let routedContent;
 let layoutRefreshes = 0;
 const apiRequests = [];
 const documentClasses = new Set();
+let activeProxmorphThemeToken = '';
 const definedClasses = {};
 const nativeDatacenterMenuItem = { text: 'Bulk Start', itemId: 'bulkstart' };
 const nativeNodeMenuItem = { text: 'Create VM', itemId: 'createvm' };
@@ -258,6 +259,11 @@ selector.on('select', (combo) => tree.setViewFilter(combo.getViewFilter()));
 
 global.window = {
     location: { hostname: 'pve.gnet.com' },
+    getComputedStyle: () => ({
+        getPropertyValue(token) {
+            return token === activeProxmorphThemeToken ? '#006eff' : '';
+        },
+    }),
     document: {
         documentElement: {
             classList: {
@@ -372,6 +378,36 @@ assert.deepEqual(
     [...documentClasses].sort(),
     ['proxmorph-font-default', 'proxmorph-text-default'],
     'saved typography classes are applied when the account preferences load',
+);
+assert.equal(
+    global.window.ProxMorphInventory.hasActiveTheme(),
+    false,
+    'stock themes do not expose ProxMorph semantic tokens',
+);
+assert.equal(
+    documentClasses.has('proxmorph-theme-active'),
+    false,
+    'stock themes never receive the modernization scope class',
+);
+activeProxmorphThemeToken = '--pm-accent';
+assert.equal(global.window.ProxMorphInventory.syncThemeState(), true);
+assert.equal(
+    documentClasses.has('proxmorph-theme-active'),
+    true,
+    'a ProxMorph semantic theme activates the modernization scope class',
+);
+activeProxmorphThemeToken = '--gh-accent-fg';
+assert.equal(
+    global.window.ProxMorphInventory.syncThemeState(),
+    true,
+    'the GitHub theme semantic token activates the modernization scope class',
+);
+activeProxmorphThemeToken = '';
+assert.equal(global.window.ProxMorphInventory.syncThemeState(), false);
+assert.equal(
+    documentClasses.has('proxmorph-theme-active'),
+    false,
+    'returning to a stock theme removes the modernization scope class',
 );
 assert.ok(
     layoutRefreshes > 0,
@@ -532,32 +568,32 @@ assert.match(
 );
 assert.match(
     navigationStyle.css,
-    /html\.proxmorph-font-modern \.x-treelist-item-text[^}]*font-family: var\(--proxmorph-ui-font\) !important;/,
+    /html\.proxmorph-theme-active\.proxmorph-font-modern \.x-treelist-item-text[^}]*font-family: var\(--proxmorph-ui-font\) !important;/,
     'the VM and container navigation treelist inherits the selected interface font',
 );
 assert.match(
     navigationStyle.css,
-    /html\.proxmorph-font-modern \.x-treelist-item-text[^}]*font-weight: 400 !important;[^}]*-webkit-font-smoothing: auto;/,
+    /html\.proxmorph-theme-active\.proxmorph-font-modern \.x-treelist-item-text[^}]*font-weight: 400 !important;[^}]*-webkit-font-smoothing: auto;/,
     'the modern font keeps readable regular weight and native smoothing',
 );
 assert.match(
     navigationStyle.css,
-    /html\[class\*="proxmorph-text-"\] \.x-treelist-item-text[^}]*font-size: var\(--proxmorph-ui-size\) !important;/,
+    /html\.proxmorph-theme-active\[class\*="proxmorph-text-"\] \.x-treelist-item-text[^}]*font-size: var\(--proxmorph-ui-size\) !important;/,
     'the VM and container navigation treelist inherits the selected text scale',
 );
 assert.match(
     navigationStyle.css,
-    /html body \.x-menu-body-default[^}]*var\(--pm-bg-surface, var\(--gh-canvas-muted\)\) !important;/,
+    /html\.proxmorph-theme-active body \.x-menu-body-default[^}]*var\(--pm-bg-surface, var\(--gh-canvas-muted\)\) !important;/,
     'floating menus resolve their surface color from the active theme tokens',
 );
 assert.match(
     navigationStyle.css,
-    /html body \.x-panel-header-title-default[^}]*var\(--pm-text, var\(--gh-fg-default\)\) !important;/,
+    /html\.proxmorph-theme-active body \.x-panel-header-title-default[^}]*var\(--pm-text, var\(--gh-fg-default\)\) !important;/,
     'default ExtJS title subclasses resolve text color from the active theme tokens',
 );
 assert.match(
     navigationStyle.css,
-    /html body \.x-btn\.x-btn-default-small[^}]*padding: 0 !important;/,
+    /html\.proxmorph-theme-active body \.x-btn\.x-btn-default-small[^}]*padding: 0 !important;/,
     'primary controls keep padding inside their measured ExtJS width',
 );
 assert.match(
@@ -577,8 +613,13 @@ assert.match(
 );
 assert.match(
     navigationStyle.css,
-    /html\.proxmorph-text-large \{[^}]*--proxmorph-ui-size: 15px;[^}]*--proxmorph-control-font-size: 14px;/,
+    /html\.proxmorph-theme-active\.proxmorph-text-large \{[^}]*--proxmorph-ui-size: 15px;[^}]*--proxmorph-control-font-size: 14px;/,
     'large content text keeps compact toolbar labels within the stable ExtJS geometry',
+);
+assert.doesNotMatch(
+    navigationStyle.css,
+    /(^|\n)html body \./,
+    'the modernization layer has no unscoped selectors that can leak into stock themes',
 );
 assert.match(
     navigationStyle.css,

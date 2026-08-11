@@ -13,7 +13,7 @@
  * protected API and the replicated Proxmox cluster filesystem. The selected
  * view itself continues to use Proxmox's native URL state.
  *
- * Version: 1.9.2
+ * Version: 1.9.3
  */
 (function () {
     'use strict';
@@ -24,7 +24,7 @@
     var CONNECTIVITY_VIEW_KEY = 'proxmorph-connectivity';
     var VNET_TYPE = 'proxmorph-vnet';
     var VNETS_URL = '/cluster/sdn/vnets';
-    var VERSION = '1.9.2';
+    var VERSION = '1.9.3';
     var PREFERENCES_URL = '/proxmorph/preferences';
     var MAX_INIT_ATTEMPTS = 40;
     var initAttempts = 0;
@@ -36,6 +36,8 @@
     var vnetRoutingAvailable = false;
     var treeContextResourceTree = null;
     var treeContextViewSelector = null;
+    var themeStateObserver = null;
+    var themeStateRefreshPending = false;
 
     var booleanSettingKeys = [
         'useIconNavigation',
@@ -141,11 +143,93 @@
         ];
     }
 
+    function hasActiveProxMorphTheme() {
+        var documentRoot = window.document && window.document.documentElement;
+        if (!documentRoot || typeof window.getComputedStyle !== 'function') {
+            return false;
+        }
+
+        try {
+            var rootStyle = window.getComputedStyle(documentRoot);
+            return ['--pm-accent', '--gh-accent-fg'].some(function (token) {
+                return rootStyle.getPropertyValue(token).trim() !== '';
+            });
+        } catch (error) {
+            return false;
+        }
+    }
+
+    function syncProxMorphThemeState() {
+        var documentRoot = window.document && window.document.documentElement;
+        if (!documentRoot || !documentRoot.classList) {
+            return false;
+        }
+
+        var active = hasActiveProxMorphTheme();
+        documentRoot.classList.remove('proxmorph-theme-active');
+        if (active) {
+            documentRoot.classList.add('proxmorph-theme-active');
+        }
+        return active;
+    }
+
+    function mutationContainsStylesheetLink(mutation) {
+        if (!mutation) {
+            return false;
+        }
+        if (mutation.type === 'attributes') {
+            return mutation.target && String(mutation.target.tagName).toLowerCase() === 'link';
+        }
+        return ['addedNodes', 'removedNodes'].some(function (collectionName) {
+            return Array.prototype.some.call(mutation[collectionName] || [], function (node) {
+                return (
+                    node &&
+                    (String(node.tagName).toLowerCase() === 'link' ||
+                        (node.querySelector && node.querySelector('link[rel~="stylesheet"]')))
+                );
+            });
+        });
+    }
+
+    function installThemeStateObserver() {
+        var documentHead = window.document && window.document.head;
+        if (themeStateObserver || !documentHead || typeof window.MutationObserver !== 'function') {
+            return;
+        }
+
+        themeStateObserver = new window.MutationObserver(function (mutations) {
+            if (
+                themeStateRefreshPending ||
+                !mutations.some(mutationContainsStylesheetLink)
+            ) {
+                return;
+            }
+            themeStateRefreshPending = true;
+            var refreshThemeState = function () {
+                themeStateRefreshPending = false;
+                applyTypographySettings(true);
+            };
+            if (typeof Ext !== 'undefined' && Ext.defer) {
+                Ext.defer(refreshThemeState, 50);
+            } else if (window.setTimeout) {
+                window.setTimeout(refreshThemeState, 50);
+            }
+        });
+        themeStateObserver.observe(documentHead, {
+            attributes: true,
+            attributeFilter: ['href', 'media', 'disabled'],
+            childList: true,
+            subtree: true,
+        });
+    }
+
     function applyTypographySettings(refreshLayout) {
         var documentRoot = window.document && window.document.documentElement;
         if (!documentRoot || !documentRoot.classList) {
             return;
         }
+
+        syncProxMorphThemeState();
 
         ['default', 'modern'].forEach(function (name) {
             documentRoot.classList.remove('proxmorph-font-' + name);
@@ -1267,6 +1351,24 @@
         });
     }
 
+    function scopeThemeStyles(css) {
+        return css
+            .replace(
+                /html\.proxmorph-font-/g,
+                'html.proxmorph-theme-active.proxmorph-font-',
+            )
+            .replace(
+                /html\.proxmorph-text-/g,
+                'html.proxmorph-theme-active.proxmorph-text-',
+            )
+            .replace(
+                /html\[class\*="proxmorph-text-"\]/g,
+                'html.proxmorph-theme-active[class*="proxmorph-text-"]',
+            )
+            .replace(/(^|\n)html \{/g, '$1html.proxmorph-theme-active {')
+            .replace(/html body/g, 'html.proxmorph-theme-active body');
+    }
+
     function installNavigationStyles() {
         if (
             typeof Ext === 'undefined' ||
@@ -1278,7 +1380,7 @@
             return;
         }
         Ext.util.CSS.createStyleSheet(
-            [
+            scopeThemeStyles([
                 '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small,',
                 '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-over,',
                 '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-focus,',
@@ -1367,7 +1469,7 @@
                 'html body .x-form-trigger-wrap-default .x-form-text-default { box-sizing: border-box !important; height: calc(var(--proxmorph-control-height) - 2px) !important; line-height: calc(var(--proxmorph-control-height) - 2px) !important; padding-top: 0 !important; padding-bottom: 0 !important; }',
                 'html body .x-form-trigger-wrap-default .x-form-trigger-default { height: calc(var(--proxmorph-control-height) - 2px) !important; }',
                 'html body .x-form-trigger-wrap-default.x-form-trigger-wrap-focus { border-color: var(--pm-accent, var(--gh-accent-fg, #006eff)) !important; box-shadow: 0 0 0 3px color-mix(in srgb, var(--pm-accent, var(--gh-accent-fg, #006eff)) 18%, transparent) !important; }',
-            ].join('\n'),
+            ].join('\n')),
             'proxmorph-inventory-navigation-style',
         );
     }
@@ -1548,6 +1650,7 @@
         installView(viewSelector, resourceTree);
         installConnectivityRefresh(viewSelector, resourceTree);
         installTreeContextActions(viewSelector, resourceTree);
+        installThemeStateObserver();
         initialized = true;
         loadPreferences(function () {
             installNavigation(viewSelector, resourceTree);
@@ -1583,6 +1686,8 @@
         getTypographyClassNames: function () {
             return typographyClassNames(settings);
         },
+        hasActiveTheme: hasActiveProxMorphTheme,
+        syncThemeState: syncProxMorphThemeState,
         preferencesAvailable: function () {
             return preferencesAvailable;
         },

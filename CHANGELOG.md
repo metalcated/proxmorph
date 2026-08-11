@@ -24,7 +24,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **No-write dry run**: accepts `--dry-run` before or after supported commands; validates runtime and backup integrity, resolves restore IDs, and previews planned backup/file/package/service/remote-node actions without creating even an operation lock.
 
 ### Changed
-- Bumped the installer version to 2.20.4.
+- Bumped the installer version to 2.20.5.
 - **Transactional novnc-pve coverage**: compatibility preflight, dry run, full backup/restore, uninstall, package-version guards, and the APT update hook now cover the noVNC template and ProxMorph console assets.
 - **Simplified PVE sensor setup**: replaces the manual `apt install lm-sensors && sensors-detect` prerequisite and sensor-filter follow-up with one informed opt-in. ProxMorph installs `lm-sensors` noninteractively, reuses existing readings, and only runs `sensors-detect --auto` when required; individual filtering remains available through `sensors configure`.
 - **Sensor package rollback**: backups now record optional `lm-sensors` state and ownership. Transaction rollback, restore, and uninstall reinstate or remove the package as needed while retaining a copy that existed before ProxMorph.
@@ -33,6 +33,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Interactive menu actions now return to the main menu after success, cancellation, or failure instead of ending the installer; command-line subcommands remain one-shot.
 
 ### Fixed
+- **Stock-theme style isolation**: scopes account typography and the shared PVE modernization layer to stylesheets that expose ProxMorph semantic theme tokens. Proxmox's native Default, Light, and Dark themes retain their original account menu, controls, grids, tabs, colors, and spacing after ProxMorph is installed.
 - **Expanded hardware sensor coverage**: displays selected chipset, NIC, ACPI, additional NVMe temperature, and power-meter readings instead of silently ignoring them. Sensor detection and configuration list those readings, and multi-socket CPU packages are labeled individually.
 - **Expandable navigation subsections**: backports upstream `e0bc882` across all 20 non-UniFi themes. Selected-item text and icon colors now target only the selected item's direct row, so nested VM, container, Firewall, Permissions, HA, and SDN entries retain readable theme colors.
 - **Typography-driven toolbar overlap**: keeps control padding inside ExtJS-measured widths and refreshes the application layout as soon as saved account typography loads, preventing header actions from colliding at larger text sizes.
