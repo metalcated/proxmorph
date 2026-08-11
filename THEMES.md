@@ -226,6 +226,13 @@ Clean, modern themes inspired by the [Ubiquiti UniFi](https://ui.com/) Network A
 
 <table>
   <tr>
+    <td width="100%" align="center" colspan="2">
+      <h3>Enterprise Slate</h3>
+      <p><strong>Flagship professional theme</strong></p>
+      <i>vCenter/Clarity-inspired command shell, dense inventory hierarchy, quiet selection, and restrained cyan actions</i>
+    </td>
+  </tr>
+  <tr>
     <td width="50%" align="center">
       <h3>GitHub Dark</h3>
       <img src="screenshots/github-dark.png" alt="GitHub Dark Theme" width="100%">
@@ -396,6 +403,12 @@ All themes are also available for Proxmox Datacenter Manager 1.x.
 ### PDM — Other Themes
 
 <table>
+  <tr>
+    <td width="100%" align="center" colspan="2">
+      <h3>Enterprise Slate</h3>
+      <i>Matching enterprise-console palette and component language for Proxmox Datacenter Manager</i>
+    </td>
+  </tr>
   <tr>
     <td width="50%" align="center">
       <h3>GitHub Dark</h3>

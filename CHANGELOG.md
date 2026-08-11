@@ -8,6 +8,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ## [Unreleased]
 
 ### Added
+- **Enterprise Slate flagship theme**: adds a professional vCenter/Clarity-inspired workspace for PVE, PBS, and PDM with a blue-gray command shell, dense inventory hierarchy, quiet full-row selection, restrained cyan actions, flatter panels, compact menus, coordinated telemetry colors, deliberate typography, keyboard focus states, and reduced-motion support. The implementation uses ProxMorph's current ExtJS/PWT contracts and original assets rather than obsolete vCenter selectors or VMware artwork.
 - **Proxmox VE 9.2.6+ compatibility preflight**: validates the package version and every patched runtime contract (`proxmoxlib.js` theme map, index loader/insertion point, and `Nodes.pm` sensor anchor) before modifying Proxmox-owned files. Future versions with unchanged contracts remain supported; changed layouts fail closed.
 - **Inventory View for PVE**: adds optional node → resource pool → guest and resource pool → guest hierarchies, plus a modal for showing or hiding VMs, containers, templates, storage, SDN/network resources, stopped guests, and grouping. Includes expand/collapse actions and uses no new browser-local persistence.
 - **vCenter-style icon navigation**: optionally replaces the native view picker with Datacenter, Inventory, Storage, and Connectivity icons. Each icon uses the same compact, transparent 34×28 toolbar-button treatment as the surrounding native controls, with explicit optical centering, an accessible name, and a hierarchy tooltip; the controls retain native Proxmox resource routing, with narrowly scoped presentation records only for cluster-wide vNets omitted from the native resource feed.
@@ -24,7 +25,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **No-write dry run**: accepts `--dry-run` before or after supported commands; validates runtime and backup integrity, resolves restore IDs, and previews planned backup/file/package/service/remote-node actions without creating even an operation lock.
 
 ### Changed
-- Bumped the installer version to 2.20.5.
+- Bumped the installer version to 2.21.0.
 - **Transactional novnc-pve coverage**: compatibility preflight, dry run, full backup/restore, uninstall, package-version guards, and the APT update hook now cover the noVNC template and ProxMorph console assets.
 - **Simplified PVE sensor setup**: replaces the manual `apt install lm-sensors && sensors-detect` prerequisite and sensor-filter follow-up with one informed opt-in. ProxMorph installs `lm-sensors` noninteractively, reuses existing readings, and only runs `sensors-detect --auto` when required; individual filtering remains available through `sensors configure`.
 - **Sensor package rollback**: backups now record optional `lm-sensors` state and ownership. Transaction rollback, restore, and uninstall reinstate or remove the package as needed while retaining a copy that existed before ProxMorph.

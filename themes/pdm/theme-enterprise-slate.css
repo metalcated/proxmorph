@@ -1,0 +1,346 @@
+/*!Enterprise Slate*/
+/*
+ * ProxMorph PDM Theme: Enterprise Slate
+ * vCenter/Clarity-inspired enterprise virtualization workspace
+ * Version: 1.0.0
+ *
+ * ─── Enterprise Slate Palette ──────────────────────────────────
+ * Accent:   #00a6d6    Text:     #e9ecef
+ * Base:     #1b2a32    Surface:  #22343c
+ * Elevated: #2b414c    Shell:    #31485a
+ */
+
+:root {
+    /* Primary — action cyan (#00a6d6) */
+    --pwt-color-primary-100: rgb(255, 255, 255) !important;
+    --pwt-color-primary-99: rgb(247, 253, 255) !important;
+    --pwt-color-primary-95: rgb(218, 246, 255) !important;
+    --pwt-color-primary-90: rgb(184, 237, 249) !important;
+    --pwt-color-primary-80: rgb(117, 216, 237) !important;
+    --pwt-color-primary-70: rgb(76, 199, 235) !important;
+    --pwt-color-primary-60: rgb(0, 166, 214) !important;
+    --pwt-color-primary-50: rgb(0, 139, 181) !important;
+    --pwt-color-primary-40: rgb(0, 112, 148) !important;
+    --pwt-color-primary-30: rgb(0, 86, 115) !important;
+    --pwt-color-primary-20: rgb(0, 61, 83) !important;
+    --pwt-color-primary-15: rgb(0, 48, 66) !important;
+    --pwt-color-primary-10: rgb(0, 35, 49) !important;
+    --pwt-color-primary-5: rgb(0, 21, 31) !important;
+    --pwt-color-primary-0: rgb(0, 0, 0) !important;
+
+    /* Secondary — cool enterprise slate */
+    --pwt-color-secondary-100: rgb(255, 255, 255) !important;
+    --pwt-color-secondary-99: rgb(246, 249, 250) !important;
+    --pwt-color-secondary-95: rgb(226, 233, 237) !important;
+    --pwt-color-secondary-90: rgb(205, 216, 222) !important;
+    --pwt-color-secondary-80: rgb(173, 187, 196) !important;
+    --pwt-color-secondary-70: rgb(143, 160, 171) !important;
+    --pwt-color-secondary-60: rgb(112, 132, 144) !important;
+    --pwt-color-secondary-50: rgb(86, 107, 119) !important;
+    --pwt-color-secondary-40: rgb(72, 87, 100) !important;
+    --pwt-color-secondary-30: rgb(55, 74, 84) !important;
+    --pwt-color-secondary-20: rgb(43, 65, 76) !important;
+    --pwt-color-secondary-15: rgb(34, 52, 60) !important;
+    --pwt-color-secondary-10: rgb(27, 42, 50) !important;
+    --pwt-color-secondary-5: rgb(15, 24, 29) !important;
+    --pwt-color-secondary-0: rgb(0, 0, 0) !important;
+
+    /* Tertiary — icy blue for secondary information */
+    --pwt-color-tertiary-100: rgb(255, 255, 255) !important;
+    --pwt-color-tertiary-99: rgb(247, 252, 255) !important;
+    --pwt-color-tertiary-95: rgb(226, 243, 250) !important;
+    --pwt-color-tertiary-90: rgb(204, 231, 242) !important;
+    --pwt-color-tertiary-80: rgb(162, 210, 228) !important;
+    --pwt-color-tertiary-70: rgb(119, 187, 213) !important;
+    --pwt-color-tertiary-60: rgb(82, 162, 192) !important;
+    --pwt-color-tertiary-50: rgb(55, 135, 166) !important;
+    --pwt-color-tertiary-40: rgb(34, 108, 138) !important;
+    --pwt-color-tertiary-30: rgb(20, 82, 108) !important;
+    --pwt-color-tertiary-20: rgb(10, 59, 80) !important;
+    --pwt-color-tertiary-15: rgb(5, 46, 64) !important;
+    --pwt-color-tertiary-10: rgb(2, 34, 49) !important;
+    --pwt-color-tertiary-5: rgb(0, 21, 31) !important;
+    --pwt-color-tertiary-0: rgb(0, 0, 0) !important;
+
+    /* Success */
+    --pwt-color-success-100: rgb(255, 255, 255) !important;
+    --pwt-color-success-99: rgb(242, 255, 245) !important;
+    --pwt-color-success-95: rgb(200, 255, 212) !important;
+    --pwt-color-success-90: rgb(148, 248, 172) !important;
+    --pwt-color-success-80: rgb(88, 225, 120) !important;
+    --pwt-color-success-70: rgb(50, 195, 85) !important;
+    --pwt-color-success-60: rgb(32, 168, 65) !important;
+    --pwt-color-success-50: rgb(18, 140, 48) !important;
+    --pwt-color-success-40: rgb(6, 115, 35) !important;
+    --pwt-color-success-30: rgb(0, 90, 22) !important;
+    --pwt-color-success-20: rgb(0, 66, 14) !important;
+    --pwt-color-success-15: rgb(0, 50, 8) !important;
+    --pwt-color-success-10: rgb(0, 36, 4) !important;
+    --pwt-color-success-5: rgb(0, 22, 0) !important;
+    --pwt-color-success-0: rgb(0, 0, 0) !important;
+
+    /* Error */
+    --pwt-color-error-100: rgb(255, 255, 255) !important;
+    --pwt-color-error-99: rgb(255, 248, 248) !important;
+    --pwt-color-error-95: rgb(255, 228, 228) !important;
+    --pwt-color-error-90: rgb(255, 200, 200) !important;
+    --pwt-color-error-80: rgb(255, 148, 148) !important;
+    --pwt-color-error-70: rgb(248, 98, 98) !important;
+    --pwt-color-error-60: rgb(225, 65, 65) !important;
+    --pwt-color-error-50: rgb(198, 42, 42) !important;
+    --pwt-color-error-40: rgb(168, 22, 22) !important;
+    --pwt-color-error-30: rgb(138, 8, 8) !important;
+    --pwt-color-error-20: rgb(105, 2, 2) !important;
+    --pwt-color-error-15: rgb(82, 0, 0) !important;
+    --pwt-color-error-10: rgb(62, 0, 0) !important;
+    --pwt-color-error-5: rgb(40, 0, 0) !important;
+    --pwt-color-error-0: rgb(0, 0, 0) !important;
+
+    /* Warning */
+    --pwt-color-warning-100: rgb(255, 255, 255) !important;
+    --pwt-color-warning-99: rgb(255, 252, 245) !important;
+    --pwt-color-warning-95: rgb(255, 242, 205) !important;
+    --pwt-color-warning-90: rgb(255, 228, 160) !important;
+    --pwt-color-warning-80: rgb(248, 205, 100) !important;
+    --pwt-color-warning-70: rgb(235, 175, 45) !important;
+    --pwt-color-warning-60: rgb(210, 152, 25) !important;
+    --pwt-color-warning-50: rgb(182, 128, 10) !important;
+    --pwt-color-warning-40: rgb(155, 105, 0) !important;
+    --pwt-color-warning-30: rgb(125, 82, 0) !important;
+    --pwt-color-warning-20: rgb(95, 60, 0) !important;
+    --pwt-color-warning-15: rgb(72, 45, 0) !important;
+    --pwt-color-warning-10: rgb(52, 32, 0) !important;
+    --pwt-color-warning-5: rgb(32, 18, 0) !important;
+    --pwt-color-warning-0: rgb(0, 0, 0) !important;
+
+    /* Neutral — Enterprise Slate scale */
+    --pwt-color-neutral-100: rgb(233, 236, 239) !important;
+    --pwt-color-neutral-99: rgb(228, 233, 236) !important;
+    --pwt-color-neutral-95: rgb(211, 220, 225) !important;
+    --pwt-color-neutral-90: rgb(199, 209, 216) !important;
+    --pwt-color-neutral-80: rgb(173, 187, 196) !important;
+    --pwt-color-neutral-70: rgb(143, 160, 171) !important;
+    --pwt-color-neutral-60: rgb(112, 132, 144) !important;
+    --pwt-color-neutral-50: rgb(86, 107, 119) !important;
+    --pwt-color-neutral-40: rgb(72, 87, 100) !important;
+    --pwt-color-neutral-30: rgb(55, 74, 84) !important;
+    --pwt-color-neutral-20: rgb(43, 65, 76) !important;
+    --pwt-color-neutral-15: rgb(34, 52, 60) !important;
+    --pwt-color-neutral-10: rgb(27, 42, 50) !important;
+    --pwt-color-neutral-5: rgb(15, 24, 29) !important;
+    --pwt-color-neutral-0: rgb(0, 0, 0) !important;
+
+    /* Neutral Alt */
+    --pwt-color-neutral-alt-100: rgb(233, 236, 239) !important;
+    --pwt-color-neutral-alt-99: rgb(226, 232, 235) !important;
+    --pwt-color-neutral-alt-95: rgb(207, 217, 222) !important;
+    --pwt-color-neutral-alt-90: rgb(191, 203, 210) !important;
+    --pwt-color-neutral-alt-80: rgb(164, 181, 190) !important;
+    --pwt-color-neutral-alt-70: rgb(132, 154, 166) !important;
+    --pwt-color-neutral-alt-60: rgb(103, 128, 141) !important;
+    --pwt-color-neutral-alt-50: rgb(79, 105, 118) !important;
+    --pwt-color-neutral-alt-40: rgb(63, 87, 100) !important;
+    --pwt-color-neutral-alt-30: rgb(49, 72, 84) !important;
+    --pwt-color-neutral-alt-20: rgb(38, 59, 70) !important;
+    --pwt-color-neutral-alt-15: rgb(31, 49, 58) !important;
+    --pwt-color-neutral-alt-10: rgb(24, 39, 47) !important;
+    --pwt-color-neutral-alt-5: rgb(13, 23, 29) !important;
+    --pwt-color-neutral-alt-0: rgb(0, 0, 0) !important;
+}
+
+/* ===== Semantic Color Remapping (darker surfaces) ===== */
+:root.pwt-dark-mode {
+    --pwt-color-surface: var(--pwt-color-neutral-10) !important;
+    --pwt-color-on-surface: var(--pwt-color-neutral-95) !important;
+    --pwt-color-surface-container: var(--pwt-color-neutral-15) !important;
+    --pwt-color-on-surface-container: var(--pwt-color-neutral-95) !important;
+    --pwt-color-neutral: var(--pwt-color-neutral-15) !important;
+    --pwt-color-on-neutral: var(--pwt-color-neutral-95) !important;
+    --pwt-color-neutral-container: var(--pwt-color-neutral-10) !important;
+    --pwt-color-on-neutral-container: var(--pwt-color-neutral-95) !important;
+    --pwt-color-dark-surface: var(--pwt-color-neutral-10) !important;
+    --pwt-color-on-dark-surface: var(--pwt-color-neutral-95) !important;
+    --pwt-color-dark-surface-container: var(--pwt-color-neutral-15) !important;
+    --pwt-color-on-dark-surface-container: var(--pwt-color-neutral-95) !important;
+    --pwt-color-neutral-alt: var(--pwt-color-neutral-alt-15) !important;
+    --pwt-color-on-neutral-alt: var(--pwt-color-neutral-alt-80) !important;
+    --pwt-color-neutral-alt-container: var(--pwt-color-neutral-alt-10) !important;
+    --pwt-color-on-neutral-alt-container: var(--pwt-color-neutral-alt-80) !important;
+    --pwt-color-background: var(--pwt-color-neutral-10) !important;
+    --pwt-color-inverse-surface: var(--pwt-color-neutral-80) !important;
+    --pwt-color-on-inverse-surface: var(--pwt-color-neutral-10) !important;
+    --pwt-color-border: var(--pwt-color-neutral-alt-30) !important;
+    --pwt-color-shadow: var(--pwt-color-neutral-0) !important;
+    background: var(--pwt-color-neutral-10) !important;
+    color: var(--pwt-color-neutral-95) !important;
+}
+
+body {
+    background-color: var(--pwt-color-neutral-10) !important;
+}
+
+/* ===== Enterprise Slate component language ===== */
+:root {
+    --pm-shell: #31485a;
+    --pm-bg-base: #1b2a32;
+    --pm-bg-surface: #22343c;
+    --pm-bg-elevated: #2b414c;
+    --pm-border: #485764;
+    --pm-text: #e9ecef;
+    --pm-text-dim: #c7d1d8;
+    --pm-text-muted: #adbbc4;
+    --pm-accent: #00a6d6;
+    --pm-accent-light: #4cc7eb;
+    --pm-row-hover: rgba(72, 87, 100, 0.24);
+    --pm-row-selected: rgba(0, 166, 214, 0.16);
+    --pm-font-ui: "Clarity City", Metropolis, "Avenir Next", Avenir,
+        "Segoe UI Variable", "Segoe UI", system-ui, -apple-system,
+        BlinkMacSystemFont, Arial, sans-serif;
+    --pm-font-data: "SFMono-Regular", "Cascadia Mono", Consolas,
+        "Liberation Mono", Menlo, monospace;
+
+    --pwt-shape-corner-extra-small: 3px !important;
+    --pwt-shape-corner-small: 4px !important;
+    --pwt-shape-corner-medium: 6px !important;
+    --pwt-shape-corner-large: 8px !important;
+    --pwt-shape-corner-extra-large: 10px !important;
+    --pwt-button-corner-shape: 4px !important;
+    --pwt-card-corner-shape: 4px !important;
+    --pwt-dialog-corner-shape: 6px !important;
+    --pwt-input-corner-shape: 4px !important;
+    --pwt-nav-link-corner-shape: 4px !important;
+    --pwt-nav-pills-corner-shape: 4px !important;
+    --pwt-tooltip-corner-shape: 4px !important;
+}
+
+html,
+body,
+button,
+input,
+select,
+textarea,
+.pwt-button,
+.pwt-nav-link,
+.pwt-list-tile,
+.pwt-datatable,
+.pwt-dialog,
+.pwt-tooltip {
+    font-family: var(--pm-font-ui) !important;
+    font-kerning: normal;
+    font-optical-sizing: auto;
+    -webkit-font-smoothing: antialiased;
+}
+
+pre,
+code,
+kbd,
+samp {
+    font-family: var(--pm-font-data) !important;
+}
+
+header,
+.pwt-header,
+.pwt-top-app-bar,
+.pwt-toolbar[role="banner"] {
+    background: var(--pm-shell) !important;
+    border-bottom: 1px solid #3f596b !important;
+    box-shadow: 0 2px 10px rgba(9, 17, 22, 0.22) !important;
+}
+
+.pwt-panel,
+.pwt-card,
+.pwt-datatable,
+.pwt-list {
+    border: 1px solid var(--pm-border) !important;
+    border-radius: 4px !important;
+    box-shadow: none !important;
+}
+
+.pwt-panel-header,
+.pwt-datatable-header {
+    background: var(--pm-bg-surface) !important;
+    border-bottom: 1px solid var(--pm-border) !important;
+    border-radius: 4px 4px 0 0 !important;
+}
+
+.pwt-button {
+    border-radius: 4px !important;
+    box-shadow: none !important;
+    font-weight: 500 !important;
+}
+
+.pwt-button:hover,
+.pwt-button:focus-visible {
+    box-shadow: none !important;
+}
+
+.pwt-nav-link,
+.pwt-list-tile {
+    border-radius: 4px !important;
+}
+
+.pwt-nav-link:hover,
+.pwt-list-tile:hover,
+.pwt-datatable tbody tr:hover {
+    background: var(--pm-row-hover) !important;
+}
+
+.pwt-nav-link.active,
+.pwt-nav-link[aria-current="page"],
+.pwt-list-tile.selected,
+.pwt-datatable tbody tr.selected,
+.pwt-datatable tbody tr[aria-selected="true"] {
+    background: var(--pm-row-selected) !important;
+    box-shadow: inset 3px 0 0 var(--pm-accent) !important;
+}
+
+.pwt-dialog:not(.pwt-dropdown),
+dialog {
+    border: 1px solid var(--pm-border) !important;
+    border-radius: 6px !important;
+    box-shadow: 0 18px 44px rgba(8, 15, 19, 0.52) !important;
+}
+
+.pwt-dropdown,
+.pwt-submenu {
+    border: 1px solid var(--pm-border) !important;
+    border-radius: 4px !important;
+    box-shadow: 0 12px 28px rgba(8, 15, 19, 0.42) !important;
+}
+
+.pwt-input,
+.pwt-input-display,
+.pwt-textarea {
+    border-radius: 4px !important;
+    box-shadow: none !important;
+}
+
+.pwt-input:focus-within {
+    box-shadow: 0 0 0 2px rgba(76, 199, 235, 0.42) !important;
+}
+
+.pwt-meter,
+.pwt-progress {
+    border-radius: 2px !important;
+}
+
+.pwt-tab-active-indicator {
+    background: var(--pm-accent) !important;
+    height: 2px !important;
+}
+
+::selection {
+    background: rgba(0, 166, 214, 0.32);
+    color: var(--pm-text);
+}
+
+@media (prefers-reduced-motion: reduce) {
+    *,
+    *::before,
+    *::after {
+        scroll-behavior: auto !important;
+        transition-duration: 0.01ms !important;
+        animation-duration: 0.01ms !important;
+        animation-iteration-count: 1 !important;
+    }
+}

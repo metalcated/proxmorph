@@ -9,6 +9,7 @@ Custom themes for Proxmox VE (PVE), Proxmox Backup Server (PBS), and Proxmox Dat
 - **Hybrid Engine** - CSS for styling + JavaScript for dynamic chart patching
 - **Hardware Sensor Monitoring** - Optional CPU/storage temps, fan speeds, and UPS status on node Summary dashboard (PVE)
 - **Inventory View** - Optional node/pool guest hierarchies and vCenter-style icon views with modal controls (PVE)
+- **Enterprise Slate** - Flagship enterprise-console theme with vCenter/Clarity-inspired hierarchy, density, and command surfaces (PVE, PBS, and PDM)
 - **Easy Installation** - Single command installation for PVE, PBS, and PDM
 
 ## 📸 Screenshot
@@ -19,7 +20,7 @@ Comparison between default Proxmox Dark theme and UniFi theme:
 
 ## 🎨 Themes
 
-**23 themes** across 9 collections. Featured themes below — [**View Full Gallery →**](THEMES.md)
+**24 themes** across 10 collections. Featured themes below — [**View Full Gallery →**](THEMES.md)
 
 <table>
   <tr>
@@ -66,6 +67,7 @@ Comparison between default Proxmox Dark theme and UniFi theme:
 | UniFi | Dark, Light, OLED |
 | GitHub Dark | — |
 | Blue Slate | — |
+| Enterprise Slate | — |
 
 </details>
 
