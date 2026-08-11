@@ -15,6 +15,7 @@ let routedContent;
 let layoutRefreshes = 0;
 const apiRequests = [];
 const documentClasses = new Set();
+const treeClasses = new Set();
 let activeProxmorphThemeToken = '';
 const definedClasses = {};
 const nativeDatacenterMenuItem = { text: 'Bulk Start', itemId: 'bulkstart' };
@@ -212,7 +213,13 @@ const workspace = {
 };
 
 const tree = {
-    toggleCls() {},
+    toggleCls(className, enabled) {
+        if (enabled) {
+            treeClasses.add(className);
+        } else {
+            treeClasses.delete(className);
+        }
+    },
     updateLayout() {
         layoutRefreshes++;
     },
@@ -239,6 +246,7 @@ const tree = {
 
 const formValues = {
     useIconNavigation: true,
+    emphasizeHierarchy: false,
     groupByNode: false,
     showPools: true,
     showVirtualMachines: false,
@@ -289,6 +297,7 @@ global.Proxmox = {
                     result: {
                         data: {
                             useIconNavigation: false,
+                            emphasizeHierarchy: true,
                             groupByNode: true,
                             showPools: true,
                             showVirtualMachines: true,
@@ -370,14 +379,27 @@ assert.deepEqual(records, [
 ]);
 assert.equal(settingsButton.itemId, 'proxmorphInventorySettings');
 assert.equal(settingsButton.tooltip, 'Inventory, appearance, and console settings');
+assert.ok(
+    settingsButton.cls.includes('pmx-view-settings-button'),
+    'the settings shortcut participates in shared icon-strip normalization',
+);
 assert.equal(navigation.itemId, 'proxmorphViewNavigation');
 assert.equal(navigation.hidden, true, 'icon navigation is opt-in');
 assert.equal(selector.hidden, false, 'native picker remains visible by default');
 assert.equal(navigationStyle.id, 'proxmorph-inventory-navigation-style');
 assert.deepEqual(
     [...documentClasses].sort(),
-    ['proxmorph-font-default', 'proxmorph-text-default'],
+    [
+        'proxmorph-font-default',
+        'proxmorph-hierarchy-emphasis',
+        'proxmorph-text-default',
+    ],
     'saved typography classes are applied when the account preferences load',
+);
+assert.equal(
+    treeClasses.has('proxmorph-hierarchy-emphasis-tree'),
+    true,
+    'the default account preference marks only the PVE resource tree for hierarchy emphasis',
 );
 assert.equal(
     global.window.ProxMorphInventory.hasActiveTheme(),
@@ -448,6 +470,16 @@ assert.match(
     /\.pmx-view-nav-button \.x-btn-icon-el \{[^}]*align-items: center !important;[^}]*justify-content: center !important;[^}]*margin: 0 !important;/s,
     'view icons are explicitly centered without inherited icon offsets',
 );
+assert.match(
+    navigationStyle.css,
+    /\.pmx-view-nav-button \.x-btn-wrap[^}]*border: 0 !important;[^}]*padding: 0 !important;[^}]*width: 100% !important;/,
+    'view buttons discard theme-specific inner borders and padding',
+);
+assert.match(
+    navigationStyle.css,
+    /\.pmx-view-nav-button \.x-btn-icon-el::before[^}]*height: 16px !important;[^}]*text-align: center !important;[^}]*width: 16px !important;/,
+    'each Font Awesome glyph is centered in the same optical box',
+);
 assert.deepEqual(
     navigationItems.map((item) => item.ariaLabel),
     ['Datacenter view', 'Inventory view', 'Storage view', 'Connectivity view'],
@@ -508,6 +540,14 @@ assert.ok(
 assert.ok(
     settingsItems.some((item) => item.name === 'groupByNode'),
     'settings modal exposes the hierarchy option',
+);
+assert.ok(
+    settingsItems.some(
+        (item) =>
+            item.name === 'emphasizeHierarchy' &&
+            item.boxLabel === 'Emphasize hierarchy levels',
+    ),
+    'settings modal exposes the optional hierarchy-emphasis control',
 );
 assert.ok(
     settingsItems.some((item) => item.name === 'uiFont'),
@@ -616,6 +656,11 @@ assert.match(
     /html\.proxmorph-theme-active\.proxmorph-text-large \{[^}]*--proxmorph-ui-size: 15px;[^}]*--proxmorph-control-font-size: 14px;/,
     'large content text keeps compact toolbar labels within the stable ExtJS geometry',
 );
+assert.match(
+    navigationStyle.css,
+    /html\.proxmorph-theme-active\.proxmorph-hierarchy-emphasis \.proxmorph-hierarchy-emphasis-tree \[role="row"\]\[aria-level="1"\] \.x-tree-node-text[^}]*font-size: calc\(var\(--proxmorph-ui-size\) \+ 1px\) !important;[^}]*font-weight: 600 !important;/,
+    'the optional hierarchy treatment enlarges only the resource-tree root',
+);
 assert.doesNotMatch(
     navigationStyle.css,
     /(^|\n)html body \./,
@@ -625,6 +670,11 @@ assert.match(
     navigationStyle.css,
     /\.x-box-target:has\(#view\) > \.x-btn\.x-btn-default-toolbar-small[^}]*border: 1px solid var\(--pm-border[^}]*height: 28px !important;/,
     'the established outlined inventory switcher controls retain their compact treatment',
+);
+assert.match(
+    navigationStyle.css,
+    /\.x-box-target:has\(#view\) > \.x-btn\.x-btn-default-toolbar-small[^}]*max-width: 34px !important;[^}]*min-width: 34px !important;[^}]*width: 34px !important;/,
+    'the native gear and ProxMorph settings buttons match the four view-button widths',
 );
 assert.match(
     navigationStyle.css,
@@ -659,6 +709,7 @@ assert.equal(apiRequests[1].method, 'PUT');
 assert.equal(apiRequests[1].url, '/proxmorph/preferences');
 assert.equal(apiRequests[1].params.groupByNode, 0);
 assert.equal(apiRequests[1].params.useIconNavigation, 1);
+assert.equal(apiRequests[1].params.emphasizeHierarchy, 0);
 assert.equal(apiRequests[1].params.showStoppedGuests, 0);
 assert.equal(apiRequests[1].params.noVncContextMenu, 1);
 assert.equal(apiRequests[1].params.noVncClipboardShortcuts, 1);
@@ -668,6 +719,11 @@ assert.deepEqual(
     [...documentClasses].sort(),
     ['proxmorph-font-modern', 'proxmorph-text-comfortable'],
     'Apply switches typography immediately after the account save succeeds',
+);
+assert.equal(
+    treeClasses.has('proxmorph-hierarchy-emphasis-tree'),
+    false,
+    'Apply removes the hierarchy treatment immediately when the account option is disabled',
 );
 
 assert.equal(selector.getValue(), 'proxmorph-inventory');

@@ -14,6 +14,7 @@ use base qw(PVE::RESTHandler);
 my $preferences_file = 'priv/proxmorph-user-preferences.json';
 my @boolean_preference_keys = qw(
     useIconNavigation
+    emphasizeHierarchy
     groupByNode
     showPools
     showVirtualMachines
@@ -33,6 +34,7 @@ my %choice_preference_values = (
 
 my $defaults = {
     useIconNavigation => 0,
+    emphasizeHierarchy => 1,
     groupByNode => 1,
     showPools => 1,
     showVirtualMachines => 1,

@@ -13,7 +13,7 @@
  * protected API and the replicated Proxmox cluster filesystem. The selected
  * view itself continues to use Proxmox's native URL state.
  *
- * Version: 1.9.3
+ * Version: 1.9.4
  */
 (function () {
     'use strict';
@@ -24,7 +24,7 @@
     var CONNECTIVITY_VIEW_KEY = 'proxmorph-connectivity';
     var VNET_TYPE = 'proxmorph-vnet';
     var VNETS_URL = '/cluster/sdn/vnets';
-    var VERSION = '1.9.3';
+    var VERSION = '1.9.4';
     var PREFERENCES_URL = '/proxmorph/preferences';
     var MAX_INIT_ATTEMPTS = 40;
     var initAttempts = 0;
@@ -41,6 +41,7 @@
 
     var booleanSettingKeys = [
         'useIconNavigation',
+        'emphasizeHierarchy',
         'groupByNode',
         'showPools',
         'showVirtualMachines',
@@ -58,6 +59,7 @@
     };
     var defaults = {
         useIconNavigation: false,
+        emphasizeHierarchy: true,
         groupByNode: true,
         showPools: true,
         showVirtualMachines: true,
@@ -240,6 +242,23 @@
         typographyClassNames(settings).forEach(function (className) {
             documentRoot.classList.add(className);
         });
+        documentRoot.classList.remove('proxmorph-hierarchy-emphasis');
+        if (settings.emphasizeHierarchy) {
+            documentRoot.classList.add('proxmorph-hierarchy-emphasis');
+        }
+        if (
+            typeof Ext !== 'undefined' &&
+            Ext.ComponentQuery &&
+            Ext.ComponentQuery.query
+        ) {
+            var resourceTree = getResourceTree();
+            if (resourceTree && resourceTree.toggleCls) {
+                resourceTree.toggleCls(
+                    'proxmorph-hierarchy-emphasis-tree',
+                    settings.emphasizeHierarchy,
+                );
+            }
+        }
 
         if (
             refreshLayout &&
@@ -1039,8 +1058,22 @@
                         },
                         {
                             xtype: 'component',
-                            cls: 'pmx-inventory-help pmx-inventory-help-last',
+                            cls: 'pmx-inventory-help',
                             html: 'Keeps guests organized inside their existing Proxmox pools.',
+                        },
+                        {
+                            xtype: 'checkboxfield',
+                            name: 'emphasizeHierarchy',
+                            boxLabel: 'Emphasize hierarchy levels',
+                            inputValue: true,
+                            uncheckedValue: false,
+                            checked: settings.emphasizeHierarchy,
+                            cls: 'pmx-inventory-option',
+                        },
+                        {
+                            xtype: 'component',
+                            cls: 'pmx-inventory-help pmx-inventory-help-last',
+                            html: 'Makes the Datacenter or cluster root one step larger and branch labels slightly stronger in ProxMorph themes.',
                         },
                     ],
                 },
@@ -1386,16 +1419,28 @@
                 '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-focus,',
                 '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-pressed,',
                 '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-menu-active {',
+                '  box-sizing: border-box !important;',
                 '  background-color: transparent !important;',
                 '  background-image: none !important;',
                 '  border: 1px solid var(--pm-border, var(--gh-border-default, rgba(127, 127, 127, 0.42))) !important;',
+                '  border-radius: var(--pm-radius-md, 6px) !important;',
                 '  box-shadow: none !important;',
+                '  height: 28px !important;',
+                '  max-width: 34px !important;',
+                '  min-height: 28px !important;',
+                '  min-width: 34px !important;',
+                '  padding: 0 !important;',
+                '  width: 34px !important;',
                 '}',
                 '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-pressed { border-color: var(--pm-border, var(--gh-border-default, rgba(127, 127, 127, 0.42))) !important; }',
                 '.x-keyboard-mode .pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-focus { outline: 2px solid var(--pm-accent, var(--gh-accent-fg, var(--pwt-text-color, rgba(127, 127, 127, 0.7)))) !important; outline-offset: 1px; }',
-                '.pmx-view-nav-button .x-btn-wrap, .pmx-view-nav-button .x-btn-button { align-items: center !important; background-color: transparent !important; background-image: none !important; display: flex !important; height: 100% !important; justify-content: center !important; width: 100% !important; }',
+                '.pmx-view-nav-button .x-btn-wrap, .pmx-view-nav-button .x-btn-button { align-items: center !important; background-color: transparent !important; background-image: none !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; box-sizing: border-box !important; display: flex !important; height: 100% !important; justify-content: center !important; margin: 0 !important; padding: 0 !important; width: 100% !important; }',
                 '.pmx-view-nav-button .x-btn-inner { display: none !important; width: 0 !important; }',
-                '.pmx-view-nav-button .x-btn-icon-el { align-items: center !important; display: flex !important; font-size: 16px; height: 16px !important; justify-content: center !important; line-height: 16px !important; margin: 0 !important; position: static !important; transform: none !important; width: 16px !important; }',
+                '.pmx-view-nav-button .x-btn-icon-el { align-items: center !important; display: inline-flex !important; flex: 0 0 16px !important; font-size: 16px !important; height: 16px !important; justify-content: center !important; line-height: 16px !important; margin: 0 !important; position: static !important; transform: none !important; width: 16px !important; }',
+                '.pmx-view-nav-button .x-btn-icon-el::before { box-sizing: border-box !important; display: block !important; font-size: inherit !important; height: 16px !important; line-height: 16px !important; margin: 0 !important; text-align: center !important; transform-origin: 50% 50% !important; width: 16px !important; }',
+                '.pmx-view-nav-button .fa-server::before { transform: scale(0.92) !important; }',
+                '.pmx-view-nav-button .fa-sitemap::before { transform: scale(1.03) !important; }',
+                '.pmx-view-nav-button .fa-database::before, .pmx-view-nav-button .fa-globe::before { transform: scale(0.98) !important; }',
                 '.pmx-view-nav-button.x-btn.x-btn-default-toolbar-small.x-btn-pressed .x-btn-icon-el { color: var(--pm-accent, var(--gh-accent-fg, var(--pwt-text-color, inherit))) !important; }',
                 '.proxmorph-inventory-settings .pmx-inventory-section { border-color: var(--pm-border, var(--gh-border-default, rgba(127, 127, 127, 0.35))) !important; }',
                 '.proxmorph-inventory-settings .pmx-inventory-section .x-fieldset-header-text { color: var(--pm-text, var(--gh-fg-default, var(--pwt-text-color, inherit))) !important; }',
@@ -1429,6 +1474,8 @@
                 'html[class*="proxmorph-text-"] .x-grid-cell-inner, html[class*="proxmorph-text-"] .x-tree-node-text, html[class*="proxmorph-text-"] .x-form-display-field, html[class*="proxmorph-text-"] .x-menu-item-text, html[class*="proxmorph-text-"] .x-boundlist-item, html[class*="proxmorph-text-"] .x-tip-body { line-height: var(--proxmorph-ui-line-height) !important; }',
                 'html[class*="proxmorph-text-"] .x-treelist-item-text, html[class*="proxmorph-text-"] .x-menu-item-text-default, html[class*="proxmorph-text-"] .x-form-display-field-default, html[class*="proxmorph-text-"] .x-grid-empty, html[class*="proxmorph-text-"] .x-tip-body-default { line-height: var(--proxmorph-ui-line-height) !important; }',
                 'html[class*="proxmorph-text-"] .x-panel-header-title, html[class*="proxmorph-text-"] .x-window-header-title { font-size: calc(var(--proxmorph-ui-size) + 1px) !important; }',
+                'html.proxmorph-theme-active.proxmorph-hierarchy-emphasis .proxmorph-hierarchy-emphasis-tree [role="row"]:not(.x-grid-tree-node-leaf) .x-tree-node-text { font-weight: 500 !important; }',
+                'html.proxmorph-theme-active.proxmorph-hierarchy-emphasis .proxmorph-hierarchy-emphasis-tree [role="row"][aria-level="1"] .x-tree-node-text { font-size: calc(var(--proxmorph-ui-size) + 1px) !important; font-weight: 600 !important; letter-spacing: -0.01em; }',
                 'html body .x-treelist-pve-nav { background-color: var(--pm-bg-base, var(--gh-canvas-default)) !important; }',
                 'html body .x-treelist-item-text, html body .x-toolbar-text-default, html body .x-form-item-label-default, html body .x-form-cb-label-default { color: var(--pm-text-dim, var(--gh-fg-muted)) !important; }',
                 'html body .x-panel-header-title-default, html body .x-window-header-title-default, html body .x-panel-header-text-default, html body .x-form-display-field-default, html body .x-menu-item-text-default, html body .x-boundlist-item { color: var(--pm-text, var(--gh-fg-default)) !important; }',
@@ -1448,8 +1495,12 @@
                 'html body .x-btn-default-toolbar-small:not(.pmx-view-nav-button).x-btn-pressed, html body .x-btn-default-toolbar-small:not(.pmx-view-nav-button).x-btn-menu-active { background-color: var(--proxmorph-modern-selected) !important; border-color: transparent !important; box-shadow: none !important; padding: 0 !important; }',
                 'html body .x-btn-default-toolbar-small:not(.pmx-view-nav-button).x-btn-pressed .x-btn-inner, html body .x-btn-default-toolbar-small:not(.pmx-view-nav-button).x-btn-menu-active .x-btn-inner, html body .x-btn-default-toolbar-small:not(.pmx-view-nav-button).x-btn-pressed .x-btn-icon-el, html body .x-btn-default-toolbar-small:not(.pmx-view-nav-button).x-btn-menu-active .x-btn-icon-el { color: var(--pm-accent, var(--gh-accent-fg, #006eff)) !important; }',
                 'html body .x-btn-default-toolbar-small:not(.pmx-view-nav-button).x-btn-disabled { background-color: transparent !important; border-color: transparent !important; box-shadow: none !important; opacity: 0.46 !important; }',
-                'html body .x-box-target:has(#view) > .x-btn.x-btn-default-toolbar-small { background-color: transparent !important; border: 1px solid var(--pm-border, var(--gh-border-default, rgba(127, 127, 127, 0.42))) !important; box-shadow: none !important; height: 28px !important; min-height: 28px !important; padding: 0 !important; }',
-                'html body .x-box-target:has(#view) > .x-btn.x-btn-default-toolbar-small .x-btn-wrap-default-toolbar-small { padding: 0 8px !important; }',
+                'html body .x-box-target:has(#view) > .x-btn.x-btn-default-toolbar-small { background-color: transparent !important; border: 1px solid var(--pm-border, var(--gh-border-default, rgba(127, 127, 127, 0.42))) !important; border-radius: var(--pm-radius-md, 6px) !important; box-shadow: none !important; box-sizing: border-box !important; height: 28px !important; max-width: 34px !important; min-height: 28px !important; min-width: 34px !important; padding: 0 !important; width: 34px !important; }',
+                'html body .x-box-target:has(#view) > .x-btn.x-btn-default-toolbar-small .x-btn-wrap-default-toolbar-small, html body .x-box-target:has(#view) > .x-btn.x-btn-default-toolbar-small .x-btn-button-default-toolbar-small { align-items: center !important; background-color: transparent !important; background-image: none !important; border: 0 !important; border-radius: 0 !important; box-shadow: none !important; box-sizing: border-box !important; display: flex !important; height: 100% !important; justify-content: center !important; margin: 0 !important; padding: 0 !important; width: 100% !important; }',
+                'html body .x-box-target:has(#view) > .x-btn.x-btn-default-toolbar-small .x-btn-icon-el { align-items: center !important; display: inline-flex !important; flex: 0 0 16px !important; font-size: 16px !important; height: 16px !important; justify-content: center !important; line-height: 16px !important; margin: 0 !important; position: static !important; transform: none !important; width: 16px !important; }',
+                'html body .x-box-target:has(#view) > .x-btn.x-btn-default-toolbar-small .x-btn-icon-el::before { box-sizing: border-box !important; display: block !important; font-size: inherit !important; height: 16px !important; line-height: 16px !important; margin: 0 !important; text-align: center !important; transform-origin: 50% 50% !important; width: 16px !important; }',
+                'html body .x-box-target:has(#view) > .x-btn.x-btn-default-toolbar-small .fa-gear::before, html body .x-box-target:has(#view) > .x-btn.x-btn-default-toolbar-small .fa-cog::before { transform: scale(1.04) !important; }',
+                'html body .x-box-target:has(#view) > .x-btn.x-btn-default-toolbar-small .fa-sitemap::before { transform: scale(1.03) !important; }',
                 'html body .x-box-target:has(#view) > .x-btn.x-btn-default-toolbar-small.x-btn-over { background-color: var(--proxmorph-modern-hover) !important; }',
                 'html body .x-toolbar-default.x-docked-top { background-color: var(--pm-bg-base, var(--gh-canvas-default)) !important; border-bottom: 0 !important; box-shadow: none !important; }',
                 'html body .x-grid-with-col-lines .x-grid-cell { border-right: 1px solid var(--proxmorph-modern-divider) !important; }',
@@ -1592,7 +1643,7 @@
         toolbar.add({
             xtype: 'button',
             itemId: 'proxmorphInventorySettings',
-            cls: 'x-btn-default-toolbar-small',
+            cls: 'x-btn-default-toolbar-small pmx-view-settings-button',
             iconCls: 'fa fa-fw fa-sitemap x-btn-icon-el-default-toolbar-small',
             tooltip: 'Inventory, appearance, and console settings',
             ariaLabel: 'Inventory, appearance, and console settings',

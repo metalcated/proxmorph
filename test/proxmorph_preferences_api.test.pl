@@ -101,6 +101,7 @@ is_deeply($put->{permissions}, { user => 'all' }, 'any authenticated account may
 
 my $root_defaults = $get->{code}->({});
 is($root_defaults->{groupByNode}, 1, 'node hierarchy is enabled by default');
+is($root_defaults->{emphasizeHierarchy}, 1, 'visual hierarchy emphasis is enabled by default');
 is($root_defaults->{showStorage}, 0, 'guest inventory excludes storage by default');
 is($root_defaults->{showNetwork}, 0, 'guest inventory excludes connectivity by default');
 is($root_defaults->{uiFont}, 'default', 'the native Proxmox font remains the safe default');
@@ -120,6 +121,7 @@ is_deeply(
 
 $put->{code}->({
     groupByNode => 0,
+    emphasizeHierarchy => 0,
     showPools => 1,
     useIconNavigation => 1,
     noVncContextMenu => 1,
@@ -138,6 +140,11 @@ is(
     1,
     'saved settings are returned to the same account',
 );
+is(
+    $get->{code}->({})->{emphasizeHierarchy},
+    0,
+    'the hierarchy-emphasis choice follows the same account',
+);
 is($get->{code}->({})->{uiFont}, 'modern', 'the selected font follows the same account');
 is(
     $get->{code}->({})->{uiTextSize},
@@ -149,6 +156,7 @@ is($get->{code}->({})->{noVncClipboardShortcuts}, 1, 'the console shortcut choic
 $PVE::RPCEnvironment::user = 'operator@pve';
 my $operator_defaults = $get->{code}->({});
 is($operator_defaults->{groupByNode}, 1, 'another account receives independent defaults');
+is($operator_defaults->{emphasizeHierarchy}, 1, 'another account receives hierarchy emphasis by default');
 is($operator_defaults->{useIconNavigation}, 0, 'another account cannot read the first account settings');
 is($operator_defaults->{uiFont}, 'default', 'another account keeps its own font preference');
 is($operator_defaults->{noVncClipboardShortcuts}, 0, 'another account does not inherit clipboard shortcut capture');
