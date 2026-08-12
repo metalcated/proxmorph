@@ -71,6 +71,16 @@ assert.match(
 );
 assert.match(
     pve,
+    /\.x-grid-row-loading\s*\{[^}]*filter: none !important;/s,
+    'running task cells preserve their dark grid surface',
+);
+assert.doesNotMatch(
+    pve,
+    /\.x-grid-row-loading\s*,[^}]*filter: invert/s,
+    'running task cells are not color-inverted with loading icons',
+);
+assert.match(
+    pve,
     /--pm-font-ui: "Clarity City", Metropolis, "Avenir Next"/,
     'the interface typography uses the deliberate Clarity-style font stack',
 );

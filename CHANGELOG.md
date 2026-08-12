@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **No-write dry run**: accepts `--dry-run` before or after supported commands; validates runtime and backup integrity, resolves restore IDs, and previews planned backup/file/package/service/remote-node actions without creating even an operation lock.
 
 ### Changed
-- Bumped the installer version to 2.21.2.
+- Bumped the installer version to 2.21.3.
 - **Enterprise Slate interaction palette**: reserves its darker cyan-blue for primary actions, links, meters, and deliberate hover states. Selection surfaces are now neutral blue-gray, form and keyboard focus use a slate border, and the stationary Documentation action keeps a restrained dark outline.
 - **Transactional novnc-pve coverage**: compatibility preflight, dry run, full backup/restore, uninstall, package-version guards, and the APT update hook now cover the noVNC template and ProxMorph console assets.
 - **Simplified PVE sensor setup**: replaces the manual `apt install lm-sensors && sensors-detect` prerequisite and sensor-filter follow-up with one informed opt-in. ProxMorph installs `lm-sensors` noninteractively, reuses existing readings, and only runs `sensors-detect --auto` when required; individual filtering remains available through `sensors configure`.
@@ -36,6 +36,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Interactive menu actions now return to the main menu after success, cancellation, or failure instead of ending the installer; command-line subcommands remain one-shot.
 
 ### Fixed
+- **Enterprise Slate running-task cells**: keeps task-grid loading cells on their native dark surface instead of inverting the entire End Time and Status cells into light rectangles; tree and resource loading icons retain their dark-theme treatment.
 - **Uniform icon-switcher rhythm**: gives the native Tree Settings-to-Datacenter gap and Connectivity-to-settings gap the same 4 px spacing already used between the four view buttons.
 - **Enterprise Slate selection edges**: removes the cyan leading borders from data rows, resource inventory, object navigation, and PDM lists; removes active-tab edge indicators; and prevents grid focus from drawing a clipped cyan top/right perimeter.
 - **Cross-theme icon switcher alignment**: gives the native Tree Settings button, four view shortcuts, and ProxMorph settings button the same 34×28 geometry, removes inherited inner-wrapper padding and borders, centers every Font Awesome glyph in a fixed 16×16 optical box, and compensates for glyph-shape differences without theme-specific offsets.

@@ -2,7 +2,7 @@
 /*
  * ProxMorph Theme: Enterprise Slate
  * A professional, vCenter/Clarity-inspired virtualization workspace
- * Version: 1.1.0
+ * Version: 1.1.1
  *
  * Built on ProxMorph's audited PVE/PBS ExtJS component coverage, then
  * reshaped around enterprise-console density, hierarchy, and restrained
@@ -236,10 +236,18 @@ canvas.x-surface-canvas, .x-surface-canvas, .x-draw-component canvas,
     box-shadow: 0 8px 24px rgba(15, 24, 29, 0.6) !important;
 }
 
-.x-grid-row-loading,
 .x-treelist-item-loading .x-treelist-item-icon,
 .x-grid-tree-loading .x-tree-icon {
     filter: invert(90%);
+}
+
+/*
+ * ExtJS applies the task loading class to the complete grid cell, not only its
+ * activity glyph. Inverting that element also inverts its dark row surface and
+ * produces a large light rectangle while a task is running.
+ */
+.x-grid-row-loading {
+    filter: none !important;
 }
 
 /* ===== ICONS ===== */
