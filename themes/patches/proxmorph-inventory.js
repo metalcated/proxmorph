@@ -13,7 +13,7 @@
  * protected API and the replicated Proxmox cluster filesystem. The selected
  * view itself continues to use Proxmox's native URL state.
  *
- * Version: 1.9.5
+ * Version: 1.9.6
  */
 (function () {
     'use strict';
@@ -24,7 +24,7 @@
     var CONNECTIVITY_VIEW_KEY = 'proxmorph-connectivity';
     var VNET_TYPE = 'proxmorph-vnet';
     var VNETS_URL = '/cluster/sdn/vnets';
-    var VERSION = '1.9.5';
+    var VERSION = '1.9.6';
     var PREFERENCES_URL = '/proxmorph/preferences';
     var MAX_INIT_ATTEMPTS = 40;
     var initAttempts = 0;
@@ -1487,6 +1487,8 @@
                 'html body .x-btn-default-small .x-btn-wrap-default-small, html body .proxmox-inline-button .x-btn-wrap { box-sizing: border-box !important; display: flex !important; align-items: center !important; justify-content: center !important; height: 100% !important; padding: 0 var(--proxmorph-control-padding) !important; }',
                 'html body .x-btn-default-small .x-btn-button-default-small, html body .proxmox-inline-button .x-btn-button { display: flex !important; align-items: center !important; justify-content: center !important; min-width: 0 !important; }',
                 'html body .x-btn-default-small .x-btn-inner-default-small, html body .proxmox-inline-button .x-btn-inner { box-sizing: border-box !important; line-height: calc(var(--proxmorph-control-height) - 2px) !important; overflow: hidden !important; padding: 0 !important; text-overflow: ellipsis; }',
+                'html body .x-window .x-toolbar-footer .x-btn-button-default-small.x-btn-text { width: 100% !important; }',
+                'html body .x-window .x-toolbar-footer .x-btn-button-default-small.x-btn-text .x-btn-inner-default-small { max-width: none !important; overflow: visible !important; text-overflow: clip !important; white-space: nowrap !important; width: 100% !important; }',
                 'html body .x-btn.x-btn-default-toolbar-small:not(.pmx-view-nav-button) { box-sizing: border-box !important; height: var(--proxmorph-control-height) !important; min-height: var(--proxmorph-control-height) !important; padding: 0 !important; background-color: transparent !important; background-image: none !important; border: 1px solid transparent !important; border-radius: var(--proxmorph-control-radius) !important; box-shadow: none !important; }',
                 'html body .x-btn-default-toolbar-small:not(.pmx-view-nav-button) .x-btn-wrap-default-toolbar-small { box-sizing: border-box !important; display: flex !important; align-items: center !important; height: 100% !important; padding: 0 var(--proxmorph-control-padding) !important; }',
                 'html body .x-btn-default-toolbar-small:not(.pmx-view-nav-button) .x-btn-inner-default-toolbar-small { line-height: calc(var(--proxmorph-control-height) - 2px) !important; padding: 0 !important; }',

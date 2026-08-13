@@ -640,6 +640,16 @@ assert.match(
 );
 assert.match(
     navigationStyle.css,
+    /\.x-window \.x-toolbar-footer \.x-btn-button-default-small\.x-btn-text[^}]*width: 100% !important;/,
+    'text-only dialog actions use the full width already measured by ExtJS',
+);
+assert.match(
+    navigationStyle.css,
+    /\.x-window \.x-toolbar-footer \.x-btn-button-default-small\.x-btn-text \.x-btn-inner-default-small[^}]*max-width: none !important;[^}]*overflow: visible !important;[^}]*text-overflow: clip !important;[^}]*white-space: nowrap !important;[^}]*width: 100% !important;/,
+    'larger account text cannot be clipped inside dialog action buttons',
+);
+assert.match(
+    navigationStyle.css,
     /\.x-btn\.x-btn-default-toolbar-small:not\(\.pmx-view-nav-button\)[^}]*border: 1px solid transparent !important;/,
     'action toolbars use clean ghost buttons instead of permanent boxes',
 );
