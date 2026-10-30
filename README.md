@@ -7,6 +7,9 @@ Custom themes for Proxmox VE (PVE), Proxmox Backup Server (PBS), and Proxmox Dat
 - **Native Integration** - Themes appear in built-in Color Theme dropdown (PVE, PBS, and PDM)
 - **Auto-Patch on Updates** - Automatically re-applies themes after product updates
 - **Hybrid Engine** - CSS for styling + JavaScript for dynamic chart patching
+- **Server-Side Default Theme** - Pick a default for browsers that have not chosen one yet; a user's own selection always wins
+- **Automatic Light/Dark** - Opt-in "(Auto)" entries per collection that follow the system color scheme live (PVE, PBS)
+- **Custom UI Font** - Any font family on top of any theme, from an installed system font or an embedded WOFF2/WOFF/TTF/OTF file, with the icon fonts left untouched (PVE, PBS, PDM)
 - **Hardware Sensor Monitoring** - Optional CPU/storage temps, fan speeds, and UPS status on node Summary dashboard (PVE)
 - **Inventory View** - Optional node/pool guest hierarchies and vCenter-style icon views with modal controls (PVE)
 - **Enterprise Slate** - Flagship enterprise-console theme with vCenter/Clarity-inspired hierarchy, neutral blue-gray selection, and restrained dark cyan-blue actions (PVE, PBS, and PDM)
@@ -20,7 +23,7 @@ Comparison between default Proxmox Dark theme and UniFi theme:
 
 ## 🎨 Themes
 
-**24 themes** across 10 collections. Featured themes below — [**View Full Gallery →**](THEMES.md)
+**25 themes** across 11 collections on PVE, PBS, and PDM. Featured themes below — [**View Full Gallery →**](THEMES.md)
 
 <table>
   <tr>
@@ -42,7 +45,7 @@ Comparison between default Proxmox Dark theme and UniFi theme:
       <h3>Catppuccin Mocha</h3>
       <img src="screenshots/catppuccin-mocha.png" alt="Catppuccin Mocha Theme" width="100%">
       <br>
-      <i>Darkest Catppuccin flavor — deep warm tones</i>
+      <i>Darkest Catppuccin flavor, deep warm tones</i>
     </td>
     <td width="50%" align="center">
       <h3>Nord Dark</h3>
@@ -63,17 +66,30 @@ Comparison between default Proxmox Dark theme and UniFi theme:
 | Nord | Dark, Light |
 | Gruvbox | Dark, Light |
 | Solarized | Dark, Light |
-| Tokyo Night | — |
+| Tokyo Night | Single theme |
 | UniFi | Dark, Light, OLED |
 | GitHub Dark | — |
 | Blue Slate | — |
 | Enterprise Slate | — |
+| ESXi Light (by [@rufftruffles](https://github.com/rufftruffles)) | PVE/PBS with bundled Clarity City fonts; PDM palette |
 
 </details>
 
 ## 🚀 Installation
 
-### One-Liner Install
+### Customized fork: install or upgrade
+
+This branch includes the upstream 2.9.0 themes plus account-saved Inventory View, Enterprise Slate, noVNC enhancements, and transactional backup/restore. Install from this checkout to retain those additions:
+
+```bash
+git clone --branch feature/proxmox-9-sidebar-inventory https://github.com/metalcated/proxmorph.git
+cd proxmorph
+./install.sh install
+```
+
+For an existing checkout on this branch, use `git pull --ff-only origin feature/proxmox-9-sidebar-inventory` followed by `./install.sh install`. The install creates a safety backup before changing managed files. The generic `update` command and upstream release commands below download IT-BAER releases, which do not contain this fork's server modules and inventory extensions; use the checkout workflow for this branch.
+
+### Upstream release install
 
 ```bash
 bash <(curl -fsSL https://raw.githubusercontent.com/IT-BAER/proxmorph/main/install.sh) install
@@ -133,6 +149,36 @@ Checksum verification still runs, against your mirrored `SHA256SUMS`.
 2. Click username → Color Theme
 3. Select a ProxMorph theme
 
+### Automatic light/dark switching
+
+Opt in once per host, then pick an "(Auto)" entry in the Color Theme dialog:
+
+```bash
+./install.sh auto-theme enable
+```
+
+Each entry is a small generated stylesheet that imports the light or dark member of a collection through the browser's `prefers-color-scheme`, so the theme follows the system setting live, without a reload. Pairs: UniFi (UniFi Light / UniFi), UniFi OLED (UniFi Light / UniFi OLED), Nord, Gruvbox, Solarized and Catppuccin (Latte / Mocha). The entries survive ProxMorph and Proxmox updates while enabled; `./install.sh auto-theme disable` removes them again. They also work as server-side default, for example `./install.sh default-theme unifi-auto`. Not available on PDM.
+
+### Custom UI font
+
+Replace the UI text font for every theme without touching the icon fonts:
+
+```bash
+./install.sh font Inter https://cdn.jsdelivr.net/npm/@fontsource/inter@5.2.5/files/inter-latin-400-normal.woff2
+```
+
+```bash
+./install.sh font "Segoe UI"
+```
+
+```bash
+./install.sh font none
+```
+
+A font file (`.woff2`, `.woff`, `.ttf` or `.otf`; a local path, or an https URL fetched once on the host; up to 4 MB) is embedded into a generated stylesheet, so browsers never load anything from the internet. With only a family name, the font has to be installed on the viewing machine. The stylesheet targets the ExtJS text selectors only, never `.fa`, `.x-fa` or the tree expanders, so FontAwesome and the status glyphs keep working, and it is linked after the active theme, so it also applies on top of ESXi Light's bundled Clarity City. The setting lives in `/etc/proxmorph/font` and survives ProxMorph and Proxmox updates. On PDM, which sets its font rule by rule, the selectors are read from the installed PDM stylesheets each time the font is applied and again after every PDM update, so the font also follows changes in new PDM releases.
+
+In this fork, a PVE account's **Modern** font choice takes precedence over the host font. The host font also updates Enterprise Slate and ESXi Light's semantic font tokens. Both `font` and `auto-theme` mutations create safety backups and support `--dry-run`; disabling them and restoring a backup are covered by the same recovery workflow as installation. The existing menu options 9–12 remain compatibility, backup, list backups, and restore; automatic themes use option 13, and fonts use `f`.
+
 ## 💻 Commands
 
 | Command | Description |
@@ -142,7 +188,11 @@ Checksum verification still runs, against your mirrored `SHA256SUMS`.
 | `./install.sh uninstall --yes` | Non-interactive full uninstall |
 | `./install.sh update` or `bash <(curl -fsSL https://raw.githubusercontent.com/IT-BAER/proxmorph/main/install.sh) update` | Updates (latest from GitHub) and install the latest themes |
 | `./install.sh status` | Show installation status |
+| `./install.sh check` | Check whether a newer release is available |
+| `./install.sh sensors [enable\|disable\|detect\|configure\|status]` | Manage hardware sensor display (PVE only; default `status`) |
 | `./install.sh default-theme <key\|none>` | Set a server-side default theme for new browsers (user choice always wins) |
+| `./install.sh auto-theme [enable\|disable\|status]` | Manage optional system light/dark entries (PVE/PBS) |
+| `./install.sh font [<family> [file\|url] \| none]` | Configure or clear a host font; no argument shows status |
 | `./install.sh compatibility` | Verify the installed Proxmox version and every source-level patch point before installation |
 | `./install.sh backup [label]` | Create a full, checksummed backup of every ProxMorph-managed path |
 | `./install.sh list-backups` | List backups and identify the clean uninstall baseline |
@@ -235,7 +285,7 @@ Run as root, `install.sh` makes only these changes, all reversible with `./insta
 
 ### Full backup, rollback, and uninstall
 
-Before every install, update, reinstall, restore, uninstall, default-theme change, or sensor change, ProxMorph creates a versioned backup under `/root/.proxmorph-backups/<product>/`. The first clean snapshot becomes the uninstall baseline. Backups include:
+Before every install, update, reinstall, restore, uninstall, default-theme, automatic-theme, custom-font, or sensor change, ProxMorph creates a versioned backup under `/root/.proxmorph-backups/<product>/`. The first clean snapshot becomes the uninstall baseline. Backups include generated automatic-theme and font stylesheets, along with:
 
 - Every package-owned file ProxMorph edits: `proxmoxlib.js`, the product index template, and on PVE the noVNC template, `Nodes.pm`, `PVE/Cluster.pm`, and `PVE/API2.pm` as applicable.
 - Every destination theme file that may be overwritten, including whether it was originally absent.
@@ -271,6 +321,22 @@ This is a full backup of the installer's system footprint, not a backup of VMs, 
 
 Theme files must start with `/*!Display Name*/` - this sets the name in Proxmox's dropdown.
 
+### Generated themes
+
+The UniFi OLED themes are not edited by hand. They are derived from the UniFi
+bases by `tools/gen-oled.sh`, which applies a per-product substitution table
+(`tools/oled-palette-pve.tsv`, `tools/oled-palette-pdm.tsv`).
+
+```bash
+bash tools/gen-oled.sh          # rewrite the OLED stylesheets
+bash tools/gen-oled.sh --check  # fail if they are stale
+bash test/oled_sync.test.sh     # same check, plus regression guards
+```
+
+After changing `themes/theme-unifi.css` or `themes/pdm/theme-unifi.css`, re-run the
+generator and commit the result. PVE/PBS and PDM need separate tables because PDM
+stores its palette in `rgb()` while PVE/PBS uses hex.
+
 ## ❓ Troubleshooting
 
 ### Themes not appearing in Color Theme dropdown
@@ -293,7 +359,7 @@ If you access Proxmox through a **Cloudflare Tunnel**, themes may not load due t
 5. Set **Cache eligibility** to **Bypass cache**
 6. Save and deploy the rule
 
-See [Issue #13](https://github.com/IT-BAER/proxmorph/issues/13) for more details — thanks to [@gioxx](https://github.com/gioxx) for the solution!
+See [Issue #13](https://github.com/IT-BAER/proxmorph/issues/13) for more details. Thanks to [@gioxx](https://github.com/gioxx) for the solution!
 
 ## ℹ️ How It Works
 

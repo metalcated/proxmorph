@@ -115,4 +115,40 @@ assert.match(filtered, /Power: 160 W/, 'power reading honors the saved filter');
 assert.doesNotMatch(filtered, /CPU|NVMe|PCH/, 'unselected readings remain hidden');
 assert.equal(sandbox.window.ProxMorphSensors.version, '1.3.0', 'sensor patch exposes the current version');
 
+// The node store survives Summary -> another tab -> Summary. Managed listeners
+// must release the destroyed view so a later poll can update the reopened view.
+const sharedStore = {
+    loads: new Set(),
+    findRecord(key, value) {
+        return value === 'sensorsOutput' ? { get: () => readings } : null;
+    },
+};
+StatusView.prototype.mon = function (store, event, handler) {
+    assert.equal(event, 'load');
+    store.loads.add(handler);
+    this.releaseStore = () => store.loads.delete(handler);
+};
+sandbox.Ext.defer = () => {};
+let updates = 0;
+function openSummary() {
+    const view = new StatusView();
+    view.getStore = () => sharedStore;
+    view.down = () => {
+        assert.ok(!view.destroyed, 'status poll never touches a destroyed Summary');
+        return { setVisible() {}, setText() { updates++; } };
+    };
+    view.initComponent();
+    view.listeners.afterrender();
+    return view;
+}
+const firstSummary = openSummary();
+sharedStore.loads.forEach((handler) => handler(sharedStore, [{}]));
+firstSummary.destroyed = true;
+firstSummary.releaseStore();
+const reopenedSummary = openSummary();
+assert.equal(sharedStore.loads.size, 1, 'reopening Summary keeps only its current managed listener');
+sharedStore.loads.forEach((handler) => handler(sharedStore, [{}]));
+assert.equal(updates, 2, 'sensor status renders on both the first and reopened Summary');
+reopenedSummary.releaseStore();
+
 console.log('PASS: expanded sensor rendering and filtering');

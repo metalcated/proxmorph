@@ -8,6 +8,43 @@ Complete gallery of all available ProxMorph themes for Proxmox VE, PBS, and PDM.
 
 ---
 
+## ESXi Light
+
+Theme by [@rufftruffles](https://github.com/rufftruffles).
+
+An ESXi-inspired light theme for Proxmox VE with slate headers, Clarity City typography, outlined icons and coordinated charts. Includes an optional resource-tree toggle. Tested on PVE 8.4 and PVE 9.2, and on PBS 4.2 (header, navigation tree, dashboard columns and the tree toggle). The PDM variant carries the palette only, without the Clarity City fonts; checked on PDM 1.1.9 (dashboard and Theme dialog).
+
+![ESXi Light with synthetic preview data](screenshots/esxi-light.png)
+
+<details>
+<summary>More ESXi Light screenshots: collapsed tree, VMs and dialogs</summary>
+
+All images use synthetic preview data.
+
+**Summary, resource tree hidden**
+
+![Summary, resource tree hidden](screenshots/esxi-light-menu-hidden.png)
+
+**Virtual machines**
+
+![Virtual machines](screenshots/esxi-light-vms.png)
+
+**Virtual machines, resource tree hidden**
+
+![Virtual machines, resource tree hidden](screenshots/esxi-light-vms-menu-hidden.png)
+
+**Network settings dialog**
+
+![Network settings dialog](screenshots/esxi-light-network-dialog.png)
+
+**Create VM wizard**
+
+![Create VM wizard](screenshots/esxi-light-create-vm.png)
+
+</details>
+
+---
+
 ## Catppuccin Collection
 
 Soothing pastel themes based on the [Catppuccin](https://github.com/catppuccin/catppuccin) color palette.

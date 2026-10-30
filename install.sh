@@ -15,7 +15,7 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Configuration
-VERSION="2.21.4"
+VERSION="2.22.0"
 TARGET_VERSION="$VERSION"
 WIDGET_TOOLKIT_DIR="/usr/share/javascript/proxmox-widget-toolkit"
 THEMES_DIR="${WIDGET_TOOLKIT_DIR}/themes"
@@ -432,10 +432,17 @@ download_release() {
     fi
     print_status "Checksum verified"
 
-    # Extract to install directory
+    # Extract beside the download first: the cache holds post-update.sh for the apt
+    # hook, so a failed extract must leave it intact. Unprivileged CTs cannot chown.
+    mkdir -p "${tmp_dir}/x"
+    if ! tar -xzf "${tmp_dir}/${archive}" --no-same-owner -C "${tmp_dir}/x"; then
+        print_error "Could not extract ${archive}, keeping the installed version"
+        rm -rf "$tmp_dir"
+        exit 1
+    fi
     mkdir -p "$INSTALL_DIR"
     rm -rf "${INSTALL_DIR:?}"/*
-    tar -xzf "${tmp_dir}/${archive}" -C "$INSTALL_DIR"
+    cp -a "${tmp_dir}/x/." "$INSTALL_DIR/"
     rm -rf "$tmp_dir"
 
     # Save version info
@@ -577,6 +584,13 @@ collect_backup_candidates() {
     add_backup_candidate "$APT_HOOK_FILE"
     add_backup_candidate "$CONFIG_DIR"
     add_backup_candidate "$PROXMORPH_LOG_FILE"
+    if [[ "$PRODUCT" != "PDM" ]]; then
+        add_backup_candidate "${THEMES_DIR}/${FONT_LIVE_NAME}"
+        local auto_key auto_title auto_light auto_dark
+        while IFS=: read -r auto_key auto_title auto_light auto_dark; do
+            [[ -n "$auto_key" ]] && add_backup_candidate "${THEMES_DIR}/theme-${auto_key}-auto.css"
+        done <<< "$AUTO_THEME_PAIRS"
+    fi
 
     if [[ "$PRODUCT" == "PDM" ]]; then
         add_backup_candidate "$PDM_THEMES_DIR"
@@ -623,6 +637,7 @@ collect_backup_candidates() {
 backup_path_is_allowed() {
     local path="$1"
     case "$path" in
+        "$THEMES_DIR/$FONT_LIVE_NAME") [[ "$PRODUCT" != "PDM" ]] && return 0 ;;
         "$INDEX_TEMPLATE"|"$INSTALL_DIR"|"$APT_HOOK_FILE"|"$CONFIG_DIR"|"$PROXMORPH_LOG_FILE") return 0 ;;
         "$PROXMOXLIB_JS") [[ "$PRODUCT" == "PVE" || "$PRODUCT" == "PBS" ]] && return 0 ;;
         "$JS_PATCHES_DIR") return 0 ;;
@@ -1180,7 +1195,7 @@ preview_install_operation() {
     validate_runtime_contracts || return 1
     themes_source=$(get_themes_source || true)
 
-    if [[ "$operation" == "update" ]]; then
+    if [[ "$operation" == "update" || ( "$operation" == install && ( -z "$themes_source" || "$themes_source" == "${INSTALL_DIR}/themes"* ) ) ]]; then
         [[ -n "$version" ]] && version_label="v${version}"
         print_info "Would download and checksum-verify ProxMorph ${version_label} before replacing ${INSTALL_DIR}."
         if [[ -n "$themes_source" ]]; then
@@ -1245,6 +1260,12 @@ preview_install_operation() {
     fi
     printf '  [write] %s (release cache and installed-path ledger)\n' "$INSTALL_DIR"
     printf '  [write] %s\n' "$APT_HOOK_FILE"
+    if font_configured; then
+        printf '  [reapply configured font] %s\n' "$FONT_CSS"
+    fi
+    if [[ "$PRODUCT" != PDM ]] && auto_themes_enabled; then
+        printf '  [regenerate automatic themes] %s\n' "$THEMES_DIR"
+    fi
     preview_service_restarts
 }
 
@@ -1501,6 +1522,41 @@ preview_default_theme_operation() {
     printf '  [restart] %s\n' "$PROXY_SERVICE"
 }
 
+preview_auto_theme_operation() {
+    local action="${1:-status}" key title light dark
+    if [[ "$action" == "toggle" ]]; then
+        if auto_themes_enabled; then action=disable; else action=enable; fi
+    fi
+    [[ "$action" == status ]] && { manage_auto_theme status; return; }
+    [[ "$action" == enable || "$action" == disable ]] || { print_error "Unknown auto-theme action: $action"; return 1; }
+    [[ "$PRODUCT" != PDM ]] || { print_error "Automatic light/dark themes are not available on PDM"; return 1; }
+    print_dry_run_header "auto-theme ${action}"
+    preview_backup_plan "auto-theme-${action}" ""
+    printf '  [setting] %s (%s)\n' "$AUTO_THEME_FILE" "$action"
+    while IFS=: read -r key title light dark; do
+        [[ -n "$key" ]] || continue
+        printf '  [%s] %s/theme-%s-auto.css\n' "$action" "$THEMES_DIR" "$key"
+    done <<< "$AUTO_THEME_PAIRS"
+    printf '  [refresh theme registration] %s\n' "$PROXMOXLIB_JS"
+    preview_service_restarts
+}
+
+preview_font_operation() {
+    local family="${1:-}" source="${2:-}" live_dir="$THEMES_DIR"
+    [[ -z "$family" ]] && { manage_font; return; }
+    if [[ "$family" != none && ! "$family" =~ ^[A-Za-z0-9][A-Za-z0-9\ _-]{0,63}$ ]]; then
+        print_error "Invalid font family: $family"; return 1
+    fi
+    print_dry_run_header "font ${family}"
+    preview_backup_plan "font" ""
+    [[ "$PRODUCT" == PDM ]] && live_dir="$PDM_THEMES_DIR"
+    printf '  [setting] %s\n' "$FONT_FILE" "$FONT_CSS"
+    [[ -n "$source" ]] && printf '  [read or download font on apply] %s\n' "$source"
+    printf '  [refresh font stylesheet] %s/%s\n' "$live_dir" "$FONT_LIVE_NAME"
+    printf '  [refresh injection] %s\n' "$INDEX_TEMPLATE"
+    preview_service_restarts
+}
+
 preview_sensor_operation() {
     local action="${1:-status}"
     local node=""
@@ -1579,6 +1635,8 @@ dry_run_dispatch() {
         restore) preview_restore_operation "${1:-latest}" "${@:2}" ;;
         uninstall) preview_uninstall_operation ;;
         default-theme) preview_default_theme_operation "${1:-}" ;;
+        auto-theme) preview_auto_theme_operation "${1:-status}" ;;
+        font) preview_font_operation "${1:-}" "${2:-}" ;;
         sensors) preview_sensor_operation "${1:-status}" ;;
         compatibility) validate_runtime_contracts ;;
         list) list_themes ;;
@@ -2110,6 +2168,356 @@ remove_js_patches() {
     fi
 }
 
+# --- Automatic light/dark themes (issue #53) ---
+AUTO_THEME_FILE="${CONFIG_DIR}/auto-themes"
+# key:Title:light-key:dark-key. Each pair becomes theme-<key>-auto.css, a stylesheet
+# that imports the light or dark member by prefers-color-scheme. Keys must fit
+# pveproxy's cookie filter: lowercase kebab-case, segments of at most 10 chars.
+AUTO_THEME_PAIRS="unifi:UniFi:unifi-light:unifi
+unifi-oled:UniFi OLED:unifi-light:unifi-oled
+nord:Nord:nord-light:nord-dark
+gruvbox:Gruvbox:gruvbox-light:gruvbox-dark
+solarized:Solarized:solarized-light:solarized-dark
+catppuccin:Catppuccin:catppuccin-latte:catppuccin-mocha"
+
+auto_themes_enabled() {
+    [[ -f "$AUTO_THEME_FILE" ]]
+}
+
+# Write theme-<key>-auto.css into $1 for every pair whose members exist there.
+# Prints each generated key on stdout; warnings go to stderr.
+generate_auto_themes() {
+    local dir="$1" key title light dark
+    while IFS=: read -r key title light dark; do
+        [[ -z "$key" ]] && continue
+        if [[ ! -f "${dir}/theme-${light}.css" || ! -f "${dir}/theme-${dark}.css" ]]; then
+            print_warning "Skipping ${title} (Auto): theme-${light}.css or theme-${dark}.css not in ${dir}" >&2
+            continue
+        fi
+        printf '/*!%s (Auto)*/\n@import url("theme-%s.css?ver=%s") (prefers-color-scheme: light);\n@import url("theme-%s.css?ver=%s") (prefers-color-scheme: dark);\n' \
+            "$title" "$light" "$VERSION" "$dark" "$VERSION" > "${dir}/theme-${key}-auto.css"
+        chmod 644 "${dir}/theme-${key}-auto.css"
+        echo "${key}-auto"
+    done <<< "$AUTO_THEME_PAIRS"
+}
+
+# Generate into the live themes dir, mirror into the cache (the apt hook
+# re-registers from there) and register each entry in the native theme_map.
+apply_auto_themes() {
+    local key generated_keys
+    generated_keys=$(generate_auto_themes "$THEMES_DIR") || return 1
+    for key in $generated_keys; do
+        if [[ -d "${INSTALL_DIR}/themes" ]]; then
+            cp "${THEMES_DIR}/theme-${key}.css" "${INSTALL_DIR}/themes/"
+        fi
+        if [[ -f "$PROXMOXLIB_JS" ]]; then
+            patch_theme_map "$key" "$(get_theme_title "${THEMES_DIR}/theme-${key}.css")"
+        fi
+        [[ -f "$INSTALLED_PATHS_FILE" ]] && record_installed_path "${THEMES_DIR}/theme-${key}.css"
+    done
+    return 0
+}
+
+remove_auto_themes() {
+    local key title light dark
+    while IFS=: read -r key title light dark; do
+        [[ -z "$key" ]] && continue
+        rm -f "${THEMES_DIR}/theme-${key}-auto.css" "${INSTALL_DIR}/themes/theme-${key}-auto.css"
+        if [[ -f "$PROXMOXLIB_JS" ]]; then
+            sed -i "/^[[:space:]]*\"${key}-auto\": /d" "$PROXMOXLIB_JS"
+        fi
+    done <<< "$AUTO_THEME_PAIRS"
+}
+
+# CLI: ./install.sh auto-theme [status|enable|disable|toggle]
+manage_auto_theme() {
+    local action="${1:-status}"
+    local owns_transaction=false
+    if [[ "$action" == "toggle" ]]; then
+        if auto_themes_enabled; then action="disable"; else action="enable"; fi
+    fi
+    if [[ "$PRODUCT" == PDM && "$action" != status ]]; then
+        print_error "Automatic light/dark themes are not available on PDM"
+        return 1
+    fi
+
+    case "$action" in
+        status)
+            if auto_themes_enabled; then
+                print_info "Automatic light/dark themes: enabled"
+                local f
+                for f in "${THEMES_DIR}"/theme-*-auto.css; do
+                    [[ -f "$f" ]] && print_theme "  $(get_theme_key "$f"): $(get_theme_title "$f")"
+                done
+            else
+                print_info "Automatic light/dark themes: disabled"
+            fi
+            print_info "Usage: $0 auto-theme <enable|disable|status>"
+            return 0
+            ;;
+        enable)
+            if [[ "$PRODUCT" == "PDM" ]]; then
+                print_error "Automatic light/dark themes are not available on PDM"
+                exit 1
+            fi
+            if ! ls "${THEMES_DIR}"/theme-*.css >/dev/null 2>&1; then
+                print_error "No ProxMorph themes installed - run '$0 install' first"
+                exit 1
+            fi
+            if [[ "$TRANSACTION_ACTIVE" != "true" ]]; then
+                begin_transaction "auto-theme-enable"
+                owns_transaction=true
+            fi
+            extend_uninstall_baseline ""
+            mkdir -p "$(dirname "$AUTO_THEME_FILE")"
+            : > "$AUTO_THEME_FILE"
+            apply_auto_themes
+            print_status "Automatic light/dark themes enabled: pick an '(Auto)' entry under username → Color Theme"
+            ;;
+        disable)
+            if [[ "$TRANSACTION_ACTIVE" != "true" ]]; then
+                begin_transaction "auto-theme-disable"
+                owns_transaction=true
+            fi
+            rm -f "$AUTO_THEME_FILE"
+            remove_auto_themes
+            print_status "Automatic light/dark themes disabled"
+            ;;
+        *)
+            print_error "Unknown action '${action}'. Usage: $0 auto-theme <enable|disable|status>"
+            exit 1
+            ;;
+    esac
+
+    restart_proxmorph_services false
+    if [[ "$owns_transaction" == "true" ]]; then commit_transaction; fi
+}
+
+# --- Custom UI font (issue #58) ---
+FONT_FILE="${CONFIG_DIR}/font"      # configured family name
+FONT_CSS="${CONFIG_DIR}/font.css"   # generated stylesheet, copied into THEMES_DIR as proxmorph-font.css
+FONT_LIVE_NAME="proxmorph-font.css"
+FONT_MARKER="<!-- ProxMorph Font -->"
+FONT_MARKER_END="<!-- /ProxMorph Font -->"
+FONT_MAX_BYTES=$((4 * 1024 * 1024))
+# Every selector on which ExtJS crisp sets a text font (font-family or the font
+# shorthand), plus the ones themes override directly. Icon fonts are never named
+# here, so FontAwesome, font-logos and inline monospace keep their own family.
+FONT_SELECTORS='html, body, body.x-body, .x-body,
+.x-panel-body-default, .x-panel-body-default-framed, .x-window-body-default,
+.x-panel-header-title-default, .x-panel-header-title-default-framed, .x-window-header-title-default,
+.x-progress-default .x-progress-text, .x-accordion-hd .x-panel-header-title,
+.x-btn-group-header-title-default, .x-btn-group-header-title-default-framed,
+.x-btn-inner, .x-btn-inner-default-small, .x-btn-inner-default-medium, .x-btn-inner-default-large,
+.x-btn-inner-default-toolbar-small, .x-btn-inner-default-toolbar-medium, .x-btn-inner-default-toolbar-large,
+.x-btn-inner-grid-cell-small, .x-toolbar-text-default, .x-toolbar-text-footer,
+.x-form-field, .x-form-text-default, .x-form-item-label-default, .x-form-cb-label-default,
+.x-form-display-field-default, .x-form-invalid-under-default, .x-html-editor-wrap textarea,
+.x-grid-item, .x-grid-cell-inner, .x-grid-empty, .x-grid-group-title, .x-grid-rowbody,
+.x-grid-row-summary .x-grid-cell, .x-grid-row-summary .x-grid-cell-rowbody, .x-grid-row-summary .x-grid-rowwrap,
+.x-column-header, .x-boundlist-item, .x-dd-drag-proxy, .x-mask-msg-inner,
+.x-menu-item-text, .x-menu-item-text-default, .x-menu-item-text-default-menubar, .x-menu-header,
+.x-tab-inner-default, .x-tab-text, .x-title-text, .x-tree-node-text, .x-treelist-item-text,
+.x-datepicker-column-header, .x-datepicker-date, .x-monthpicker-item,
+.x-fieldset-header-default > .x-fieldset-header-text, .x-fieldset-header-text,
+.x-tip-body-default, .x-legend-item'
+FONT_FALLBACK='-apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif'
+# PDM sets "Roboto Flex" rule by rule in its Yew stylesheets, which the WASM app loads after
+# our <link>; print each such selector html-prefixed so the override outranks it.
+PDM_FONT_AWK='BEGIN { RS = "}" }
+/Roboto Flex/ && !/@font-face/ {
+    n = split($0, part, "{"); m = split(part[n - 1], sel, ",")
+    for (i = 1; i <= m; i++) {
+        s = sel[i]; gsub(/^[ \t\n]+|[ \t\n]+$/, "", s)
+        if (s == "") continue
+        s = (s ~ /^:root/) ? "html" s : "html " s
+        if (!seen[s]++) out = out (out == "" ? "" : ",\n") s
+    }
+}
+END { if (out != "") print out }'
+
+font_configured() {
+    [[ -f "$FONT_FILE" ]]
+}
+
+# Comments in the Yew CSS contain braces, so strip them before splitting on "}".
+pdm_font_selectors() {
+    perl -0pe 's{/\*.*?\*/}{}gs' "$PDM_MANAGER_DIR"/*-yew-style.css 2>/dev/null | awk "$PDM_FONT_AWK"
+}
+
+# Print the typography rule for family $1. PDM's own font rules are partly !important,
+# so its override is too, and Roboto Flex's opsz/wdth variation values are reset.
+font_rule() {
+    if [[ "$PRODUCT" == "PDM" ]]; then
+        printf '%s {\n    font-family: "%s", %s !important;\n    font-variation-settings: normal !important;\n}\n' \
+            "$(pdm_font_selectors)" "$1" "$FONT_FALLBACK"
+    else
+        # Our Enterprise Slate and upstream ESXi Light consume semantic font
+        # tokens. Account-selected Modern typography still takes precedence.
+        printf ':root { --pm-font-ui: "%s", %s; --pm-font: "%s", %s; }\n' "$1" "$FONT_FALLBACK" "$1" "$FONT_FALLBACK"
+        printf '%s {\n    font-family: "%s", %s;\n}\n' "$FONT_SELECTORS" "$1" "$FONT_FALLBACK"
+    fi
+}
+
+# PDM selectors change between releases: rebuild the rule from the installed Yew
+# stylesheets, keeping the header and the embedded @font-face.
+refresh_pdm_font_css() {
+    [[ -n "$(pdm_font_selectors)" ]] || return 0
+    local tmp=$(mktemp)
+    { grep -E '^(/\*|@font-face)' "$FONT_CSS"; font_rule "$(cat "$FONT_FILE")"; } > "$tmp"
+    mv "$tmp" "$FONT_CSS"
+}
+
+# Print the stylesheet for family $1, embedding font file $2 when given.
+generate_font_css() {
+    local family="$1" file="${2:-}" ext mime fmt
+    echo "/* ProxMorph custom UI font (issue #58). Generated by 'install.sh font'; change it with that command. */"
+    if [[ -n "$file" ]]; then
+        ext="${file##*.}"; ext="${ext,,}"
+        case "$ext" in
+            woff2) mime="font/woff2"; fmt="woff2" ;;
+            woff)  mime="font/woff";  fmt="woff" ;;
+            ttf)   mime="font/ttf";   fmt="truetype" ;;
+            otf)   mime="font/otf";   fmt="opentype" ;;
+        esac
+        printf '@font-face { font-family: "%s"; font-style: normal; font-weight: 100 900; font-display: swap; src: url("data:%s;base64,%s") format("%s"); }\n' \
+            "$family" "$mime" "$(base64 -w0 "$file")" "$fmt"
+    fi
+    font_rule "$family"
+}
+
+remove_font_injection() {
+    if [[ -f "$INDEX_TEMPLATE" ]] && grep -q "$FONT_MARKER" "$INDEX_TEMPLATE"; then
+        local esc_start=$(printf '%s\n' "$FONT_MARKER" | sed 's/[]\/$*.^[]/\\&/g')
+        local esc_end=$(printf '%s\n' "$FONT_MARKER_END" | sed 's/[]\/$*.^[]/\\&/g')
+        sed -i "\|${esc_start}|,\|${esc_end}|d" "$INDEX_TEMPLATE"
+    fi
+}
+
+# Copy the kept stylesheet into the served themes dir and link it before </head>.
+# That places it after the theme <link>, so it wins ties without !important.
+# PDM: served from proxmorph-themes, linked at the end of the ProxMorph PDM block.
+apply_font() {
+    font_configured && [[ -f "$FONT_CSS" ]] || return 0
+    local live_dir="$THEMES_DIR" web_path="$THEME_WEB_PATH" anchor="</head>"
+    if [[ "$PRODUCT" == "PDM" ]]; then
+        refresh_pdm_font_css
+        live_dir="$PDM_THEMES_DIR" web_path="/proxmorph-themes"
+        grep -qF "$PDM_CSS_MARKER_END" "$INDEX_TEMPLATE" 2>/dev/null && anchor="$PDM_CSS_MARKER_END"
+    fi
+    mkdir -p "$live_dir"
+    cp "$FONT_CSS" "${live_dir}/${FONT_LIVE_NAME}"
+    chmod 644 "${live_dir}/${FONT_LIVE_NAME}"
+    grep -qF "$anchor" "$INDEX_TEMPLATE" 2>/dev/null || { print_error "Font insertion point missing in $INDEX_TEMPLATE"; return 1; }
+    remove_font_injection
+    local stamp=$(stat -c %Y "$FONT_CSS" 2>/dev/null || date +%s)
+    local tmpblock=$(mktemp)
+    printf '%s\n<link rel="stylesheet" type="text/css" href="%s/%s?v=%s">\n%s\n' \
+        "$FONT_MARKER" "$web_path" "$FONT_LIVE_NAME" "$stamp" "$FONT_MARKER_END" > "$tmpblock"
+    local tmpout=$(mktemp)
+    awk -v blockfile="$tmpblock" -v anchor="$anchor" 'BEGIN{done=0; while((getline line < blockfile)>0) block=block (block?"\n":"") line} !done && index($0, anchor){print block; done=1} {print}' "$INDEX_TEMPLATE" > "$tmpout"
+    mv "$tmpout" "$INDEX_TEMPLATE"
+    chmod 644 "$INDEX_TEMPLATE"
+    rm -f "$tmpblock"
+    [[ "$PRODUCT" != PDM && -f "$INSTALLED_PATHS_FILE" ]] && record_installed_path "${live_dir}/${FONT_LIVE_NAME}"
+    return 0
+}
+
+remove_font() {
+    remove_font_injection
+    local live_dir="$THEMES_DIR"
+    [[ "$PRODUCT" == PDM ]] && live_dir="$PDM_THEMES_DIR"
+    rm -f "${live_dir}/${FONT_LIVE_NAME}" "$FONT_FILE" "$FONT_CSS"
+}
+
+# CLI: ./install.sh font [<family> [file|https-url] | none]
+manage_font() {
+    local family="${1:-}" source="${2:-}"
+    local owns_transaction=false
+    if [[ -z "$family" ]]; then
+        if font_configured; then
+            local kind="system font"
+            grep -q '@font-face' "$FONT_CSS" 2>/dev/null && kind="embedded"
+            print_info "Custom UI font: $(cat "$FONT_FILE") (${kind})"
+        else
+            print_info "Custom UI font: not set"
+        fi
+        print_info "Usage: $0 font <family> [font.woff2|.woff|.ttf|.otf|https://...]   |   $0 font none"
+        return 0
+    fi
+    if [[ "$family" == "none" ]]; then
+        if [[ "$TRANSACTION_ACTIVE" != "true" ]]; then
+            begin_transaction "font-remove"
+            owns_transaction=true
+        fi
+        remove_font
+        print_status "Custom UI font removed"
+    else
+        local family_re='^[A-Za-z0-9][A-Za-z0-9 _-]{0,63}$'
+        if ! [[ "$family" =~ $family_re ]]; then
+            print_error "Font family must be 1-64 letters, digits, spaces, '-' or '_' (got '${family}')"
+            exit 1
+        fi
+        if [[ "$PRODUCT" == "PDM" && -z "$(pdm_font_selectors)" ]]; then
+            print_error "No font rules found in ${PDM_MANAGER_DIR}/*-yew-style.css"
+            exit 1
+        fi
+        local file="" tmp=""
+        if [[ -n "$source" ]]; then
+            if [[ "$source" =~ ^https?:// ]]; then
+                tmp=$(mktemp -d)
+                file="${tmp}/$(basename "${source%%\?*}")"
+                print_info "Downloading ${source}..."
+                if ! curl -fsSL --max-filesize "$FONT_MAX_BYTES" "$source" -o "$file"; then
+                    rm -rf "$tmp"
+                    print_error "Download failed: ${source}"
+                    exit 1
+                fi
+            else
+                file="$source"
+            fi
+            if [[ ! -f "$file" ]]; then
+                print_error "Font file not found: ${file}"
+                exit 1
+            fi
+            case "${file##*.}" in
+                woff2|woff|ttf|otf|WOFF2|WOFF|TTF|OTF) ;;
+                *)
+                    [[ -n "$tmp" ]] && rm -rf "$tmp"
+                    print_error "Unsupported font file '${file}': use .woff2, .woff, .ttf or .otf"
+                    exit 1
+                    ;;
+            esac
+            if (( $(stat -c %s "$file") > FONT_MAX_BYTES )); then
+                [[ -n "$tmp" ]] && rm -rf "$tmp"
+                print_error "Font file larger than 4 MB: ${file}"
+                exit 1
+            fi
+        fi
+        if [[ "$TRANSACTION_ACTIVE" != "true" ]]; then
+            begin_transaction "font-set"
+            owns_transaction=true
+        fi
+        extend_uninstall_baseline ""
+        mkdir -p "$(dirname "$FONT_FILE")"
+        generate_font_css "$family" "$file" > "$FONT_CSS"
+        echo "$family" > "$FONT_FILE"
+        [[ -n "$tmp" ]] && rm -rf "$tmp"
+        apply_font
+        # A hook written by an older installer does not know about fonts.
+        [[ -f "$POST_INVOKE_SCRIPT" ]] && install_apt_hook >/dev/null
+        if [[ -n "$file" ]]; then
+            print_status "Custom UI font '${family}' embedded from $(basename "$file") and enabled"
+        else
+            print_status "Custom UI font set to system font '${family}'"
+        fi
+        print_info "Reload the UI with Ctrl+Shift+R to see it"
+    fi
+
+    restart_proxmorph_services false
+    if [[ "$owns_transaction" == "true" ]]; then commit_transaction; fi
+}
+
 # --- Server-side default theme (issue #52) ---
 
 # Print configured default theme key (empty if none)
@@ -2306,7 +2714,7 @@ install_pdm_themes() {
         for css_file in "${PDM_THEMES_DIR}"/theme-*.css; do
             if [[ -f "$css_file" ]]; then
                 local css_name=$(basename "$css_file")
-                echo "<link rel=\"stylesheet\" href=\"/proxmorph-themes/${css_name}\" class=\"proxmorph-theme\" disabled>" >> "$tmpblock"
+                echo "<link rel=\"stylesheet\" href=\"/proxmorph-themes/${css_name}\" class=\"proxmorph-theme\" data-title=\"$(get_theme_title "$css_file")\" disabled>" >> "$tmpblock"
             fi
         done
 
@@ -2353,6 +2761,9 @@ JSBLOCK
     else
         print_warning "$(basename "$INDEX_TEMPLATE") not found — PDM themes may not load"
     fi
+
+    # The block was rebuilt without the font link; put it back (if configured)
+    apply_font
 
     print_status "PDM themes installed — ${theme_count} theme(s)"
 }
@@ -2411,6 +2822,8 @@ PVE_API_PREFS_MARKER="${PVE_API_PREFS_MARKER}"
 NOVNC_INDEX_TPL="${NOVNC_INDEX_TPL}"
 NOVNC_PROXMORPH_DIR="${NOVNC_PROXMORPH_DIR}"
 NOVNC_PATCH_MARKER="${NOVNC_PATCH_MARKER}"
+PDM_MANAGER_DIR="${PDM_MANAGER_DIR}"
+PDM_JS_PATCHES_DIR="${PDM_JS_PATCHES_DIR}"
 DEFAULT_THEME_FILE="${DEFAULT_THEME_FILE}"
 DEFAULT_THEME_MARKER="${DEFAULT_THEME_MARKER}"
 DEFAULT_THEME_MARKER_END="${DEFAULT_THEME_MARKER_END}"
@@ -2418,6 +2831,13 @@ THEME_COOKIE="${THEME_COOKIE}"
 THEME_WEB_PATH="${THEME_WEB_PATH}"
 BACKUP_ROOT="${BACKUP_ROOT}"
 LOCK_FILE="${LOCK_FILE}"
+FONT_CSS="${FONT_CSS}"
+FONT_LIVE_NAME="${FONT_LIVE_NAME}"
+FONT_MARKER="${FONT_MARKER}"
+FONT_MARKER_END="${FONT_MARKER_END}"
+FONT_FILE="${FONT_FILE}"
+FONT_FALLBACK='${FONT_FALLBACK}'
+PDM_FONT_AWK='${PDM_FONT_AWK}'
 
 # Set themes source based on product
 if [ "\$PRODUCT" = "PDM" ]; then
@@ -2493,6 +2913,13 @@ if [ "\$PRODUCT" = "PVE" ] && [ -d "\${THEMES_SOURCE}/novnc" ]; then
        [ ! -f "\${NOVNC_PROXMORPH_DIR}/proxmorph-novnc.css" ] || \
        ! cmp -s "\${THEMES_SOURCE}/novnc/proxmorph-novnc.js" "\${NOVNC_PROXMORPH_DIR}/proxmorph-novnc.js" || \
        ! cmp -s "\${THEMES_SOURCE}/novnc/proxmorph-novnc.css" "\${NOVNC_PROXMORPH_DIR}/proxmorph-novnc.css"; then
+        needs_repatch=true
+    fi
+fi
+
+# Custom font link or stylesheet lost after update? (PVE/PBS)
+if [ "\$PRODUCT" != "PDM" ] && [ -f "\$FONT_CSS" ]; then
+    if ! grep -q "\$FONT_MARKER" "\$INDEX_TEMPLATE" 2>/dev/null || [ ! -f "\${WIDGET_TOOLKIT_DIR}/themes/\$FONT_LIVE_NAME" ]; then
         needs_repatch=true
     fi
 fi
@@ -2648,7 +3075,8 @@ if [ "\$needs_repatch" = "true" ]; then
             for css_file in "\${PDM_THEMES_DIR}"/theme-*.css; do
                 if [ -f "\$css_file" ]; then
                     css_name=\$(basename "\$css_file")
-                    echo "<link rel=\"stylesheet\" href=\"/proxmorph-themes/\${css_name}\" class=\"proxmorph-theme\" disabled>" >> "\$tmpblock"
+                    css_title=\$(head -1 "\$css_file" | sed -n 's|^/\*!\(.*\)\*/.*|\1|p')
+                    echo "<link rel=\"stylesheet\" href=\"/proxmorph-themes/\${css_name}\" class=\"proxmorph-theme\" data-title=\"\${css_title}\" disabled>" >> "\$tmpblock"
                 fi
             done
             if [ -f "\$DEFAULT_THEME_FILE" ]; then
@@ -2672,6 +3100,20 @@ if [ "\$needs_repatch" = "true" ]; then
 </script>
 JSBLK
             echo "<script src=\"/js/proxmorph/pdm-theme-selector.js\"></script>" >> "\$tmpblock"
+            # Custom UI font: same rule as install.sh font_rule(), re-extracted because
+            # the PDM update that replaced index.hbs may have changed the Yew selectors
+            if [ -f "\$FONT_CSS" ] && [ -f "\$FONT_FILE" ]; then
+                pdm_sel=\$(perl -0pe 's{/\*.*?\*/}{}gs' "\$PDM_MANAGER_DIR"/*-yew-style.css 2>/dev/null | awk "\$PDM_FONT_AWK")
+                if [ -n "\$pdm_sel" ]; then
+                    f_tmp=\$(mktemp)
+                    { grep -E '^(/\*|@font-face)' "\$FONT_CSS"; printf '%s {\n    font-family: "%s", %s !important;\n    font-variation-settings: normal !important;\n}\n' "\$pdm_sel" "\$(cat "\$FONT_FILE")" "\$FONT_FALLBACK"; } > "\$f_tmp"
+                    mv "\$f_tmp" "\$FONT_CSS"
+                fi
+                cp "\$FONT_CSS" "\${PDM_THEMES_DIR}/\$FONT_LIVE_NAME"
+                chmod 644 "\${PDM_THEMES_DIR}/\$FONT_LIVE_NAME"
+                printf '%s\n<link rel="stylesheet" type="text/css" href="/proxmorph-themes/%s?v=%s">\n%s\n' "\$FONT_MARKER" "\$FONT_LIVE_NAME" "\$(stat -c %Y "\$FONT_CSS")" "\$FONT_MARKER_END" >> "\$tmpblock"
+                log "Re-applied custom font for PDM"
+            fi
             echo "\$PDM_CSS_MARKER_END" >> "\$tmpblock"
             tmpout=\$(mktemp)
             awk -v blockfile="\$tmpblock" 'BEGIN{done=0; while((getline line < blockfile)>0) block=block (block?"\n":"") line} !done && /<\/head>/{print block; done=1} {print}' "\$INDEX_TEMPLATE" > "\$tmpout"
@@ -2755,6 +3197,23 @@ DTBLOCK
                 chmod 644 "\$INDEX_TEMPLATE"
                 rm -f "\$dt_block"
                 log "Re-injected default theme '\$default_key' into \$(basename "\$INDEX_TEMPLATE")"
+            fi
+        fi
+
+        # Re-apply custom UI font (PVE/PBS)
+        if [ -f "\$FONT_CSS" ]; then
+            mkdir -p "\${WIDGET_TOOLKIT_DIR}/themes"
+            cp "\$FONT_CSS" "\${WIDGET_TOOLKIT_DIR}/themes/\$FONT_LIVE_NAME"
+            chmod 644 "\${WIDGET_TOOLKIT_DIR}/themes/\$FONT_LIVE_NAME"
+            if [ -f "\$INDEX_TEMPLATE" ] && ! grep -q "\$FONT_MARKER" "\$INDEX_TEMPLATE"; then
+                f_block=\$(mktemp)
+                printf '%s\n<link rel="stylesheet" type="text/css" href="%s/%s?v=%s">\n%s\n' "\$FONT_MARKER" "\$THEME_WEB_PATH" "\$FONT_LIVE_NAME" "\$(stat -c %Y "\$FONT_CSS")" "\$FONT_MARKER_END" > "\$f_block"
+                f_out=\$(mktemp)
+                awk -v blockfile="\$f_block" 'BEGIN{done=0; while((getline line < blockfile)>0) block=block (block?"\n":"") line} !done && /<\/head>/{print block; done=1} {print}' "\$INDEX_TEMPLATE" > "\$f_out"
+                mv "\$f_out" "\$INDEX_TEMPLATE"
+                chmod 644 "\$INDEX_TEMPLATE"
+                rm -f "\$f_block"
+                log "Re-injected custom font link into \$(basename "\$INDEX_TEMPLATE")"
             fi
         fi
 
@@ -3343,7 +3802,7 @@ patch_cluster_sensors() {
     read -p "Deploy sensor patch to remote nodes? [Y/n]: " deploy_choice
     case "$deploy_choice" in
         [Nn]|[Nn][Oo])
-            print_info "Skipping remote nodes. Run 'install.sh manage-sensors enable' on each node individually."
+            print_info "Skipping remote nodes. Run 'install.sh sensors enable' on each node individually."
             return 0
             ;;
     esac
@@ -3529,7 +3988,7 @@ manage_sensors() {
                 return 1
             fi
             if ! check_sensors; then
-                print_error "Sensors are not enabled. Enable them first with: install.sh manage-sensors enable"
+                print_error "Sensors are not enabled. Enable them first with: install.sh sensors enable"
                 return 1
             fi
             if [[ "$TRANSACTION_ACTIVE" != "true" ]]; then
@@ -3637,6 +4096,33 @@ sync_installer_to_cache() {
     [[ -f "${INSTALL_DIR}/install.sh" ]] && chmod 755 "${INSTALL_DIR}/install.sh"
 }
 
+# Record what was actually installed. Themes copied from the ${INSTALL_DIR} cache
+# carry the version download_release() already wrote there; stamping $VERSION over
+# it would report the version of the *script* the user ran, which is how a stale
+# install can claim to be current. Only a local checkout is ours to label.
+record_version() { # $1 = themes source dir
+    [[ "$1" == "${INSTALL_DIR}/themes"* ]] || echo "$VERSION" > "${INSTALL_DIR}/.version"
+}
+
+# Install, fetching the release first when there is nothing local to install from.
+# Piped execution (`bash <(curl …/install.sh) install`) has no themes/ dir next to
+# the script, so get_themes_source() falls back to the ${INSTALL_DIR} cache left by
+# the previously installed version. Without this, `install` silently reinstalls
+# stale CSS instead of the version the user just fetched.
+install_latest() {
+    local src
+    src=$(get_themes_source) || src=""
+    if [[ -z "$src" || "$src" == "${INSTALL_DIR}/themes"* ]]; then
+        validate_runtime_contracts
+        if [[ "$TRANSACTION_ACTIVE" != "true" ]]; then
+            begin_transaction "install-download" "$src"
+        fi
+        print_info "No local theme files, fetching the latest release..."
+        download_release
+    fi
+    install_themes
+}
+
 # Install all themes from themes directory
 install_themes() {
     print_info "Installing ProxMorph themes..."
@@ -3694,7 +4180,7 @@ install_themes() {
         
         install_pdm_themes "$themes_source"
         install_apt_hook
-        echo "$TARGET_VERSION" > "${INSTALL_DIR}/.version"
+        record_version "$themes_source"
         
         echo ""
         print_status "ProxMorph PDM themes installed successfully!"
@@ -3784,11 +4270,19 @@ install_themes() {
     # Install JavaScript patches (chart colors, etc.)
     install_js_patches
 
+    # Regenerate automatic light/dark themes (if enabled)
+    if auto_themes_enabled && [[ "$PRODUCT" != "PDM" ]]; then
+        apply_auto_themes
+    fi
+
     # Re-apply server-side default theme (if configured)
     inject_default_theme
 
+    # Re-apply custom UI font (if configured)
+    apply_font
+
     # Write version file
-    echo "$TARGET_VERSION" > "${INSTALL_DIR}/.version"
+    record_version "$themes_source"
     
     # Offer hardware sensor integration (PVE only)
     if [[ "$PRODUCT" == "PVE" ]]; then
@@ -3862,6 +4356,18 @@ remove_installed_assets() {
     local themes_source="${1:-}"
     local path=""
     local css_file=""
+
+    # Generated assets may have been introduced after an older baseline was made.
+    if [[ "$PRODUCT" != PDM ]]; then
+        local auto_key auto_title auto_light auto_dark
+        for path in "${THEMES_DIR}/${FONT_LIVE_NAME}"; do
+            if path_exists "$path"; then remove_exact_path "$path"; fi
+        done
+        while IFS=: read -r auto_key auto_title auto_light auto_dark; do
+            path="${THEMES_DIR}/theme-${auto_key}-auto.css"
+            if path_exists "$path"; then remove_exact_path "$path"; fi
+        done <<< "$AUTO_THEME_PAIRS"
+    fi
 
     if [[ -f "$INSTALLED_PATHS_FILE" ]]; then
         while IFS= read -r path; do
@@ -4071,6 +4577,9 @@ show_status() {
         echo -e "  Default:    ${YELLOW}Not set${NC}"
     fi
     
+    manage_auto_theme status
+    manage_font
+
     # Sensor status (PVE only)
     if [[ "$PRODUCT" == "PVE" ]]; then
         manage_sensors status
@@ -4114,12 +4623,14 @@ show_menu() {
     echo " 10) Create full backup"
     echo " 11) List backups"
     echo " 12) Restore a backup"
+    [[ "$PRODUCT" != "PDM" ]] && echo " 13) Toggle automatic light/dark themes"
+    echo "  f) Set custom UI font"
     echo "  0) Exit"
     echo ""
-    read -r -p "Enter choice [0-12]: " choice
+    read -r -p "Enter choice [0-13, f]: " choice
 
     case $choice in
-        1) run_menu_action install_themes ;;
+        1) run_menu_action install_latest ;;
         2) run_menu_action update_themes ;;
         3) run_menu_action reinstall_themes ;;
         4) run_menu_action uninstall_themes ;;
@@ -4143,6 +4654,18 @@ show_menu() {
             read -r -p "Enter backup ID (latest or baseline are also accepted): " restore_id
             if [[ -n "$restore_id" ]]; then
                 run_menu_action restore_backup "$restore_id"
+            fi
+            ;;
+        13) run_menu_action manage_auto_theme toggle ;;
+        f|F)
+            run_menu_action manage_font
+            echo ""
+            read -p "Enter font family (or 'none' to clear, empty to cancel): " font_family
+            if [[ "$font_family" == "none" ]]; then
+                run_menu_action manage_font none
+            elif [[ -n "$font_family" ]]; then
+                read -p "Font file path or https URL (empty for an installed system font): " font_source
+                run_menu_action manage_font "$font_family" ${font_source:+"$font_source"}
             fi
             ;;
         0) exit 0 ;;
@@ -4195,12 +4718,18 @@ main() {
         default-theme)
             [[ -z "${2:-}" ]] || acquire_operation_lock
             ;;
+        font)
+            [[ -z "${2:-}" ]] || acquire_operation_lock
+            ;;
+        auto-theme)
+            [[ "${2:-status}" == status ]] || acquire_operation_lock
+            ;;
         *) acquire_operation_lock ;;
     esac
     
     case "${1:-}" in
         install)
-            install_themes
+            install_latest
             ;;
         update)
             update_themes "${2:-}"
@@ -4248,6 +4777,12 @@ main() {
                 return 1
             fi
             install_novnc_clipboard "${INSTALL_DIR}/themes"
+            ;;
+        auto-theme)
+            manage_auto_theme "${2:-status}"
+            ;;
+        font)
+            manage_font "${2:-}" "${3:-}"
             ;;
         *)
             while true; do

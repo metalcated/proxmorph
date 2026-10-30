@@ -1,3 +1,8 @@
 # Shell scripts run on Proxmox hosts and MUST be LF, even when checked out on
 # Windows (where core.autocrlf=true would otherwise produce CRLF and break bash).
 *.sh text eol=lf
+
+# The OLED generator reads its palette tables field-by-field; a CR smuggled into
+# the last column would end up inside a CSS color value. Keep the tooling LF.
+*.awk text eol=lf
+*.tsv text eol=lf

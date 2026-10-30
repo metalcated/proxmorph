@@ -1,24 +1,24 @@
 /*!UniFi OLED*/
 /*
  * ProxMorph Theme: UniFi OLED
- * Derived from theme-unifi.css via the OLED hex-substitution recipe (see docs). Re-run that recipe to re-sync after base UniFi changes.
+ * Generated from theme-unifi.css by tools/gen-oled.sh. Do not edit by hand; re-run the generator to re-sync.
  * Authentic recreation of Ubiquiti UniFi Network Application UI
- * Version: 1.0.0
+ * Version: 5.94
  * Author: N.E.S.T. / Dr. Dranglog
  * 
  * UniFi Color Palette (extracted from live instance):
  * 
  * BACKGROUNDS:
- * - Base/Body: #000000 (rgb 19,20,22) - main dark background
- * - Header: #0a0a0a (rgb 40,43,47) - top navigation bar
- * - Hover solid: #1e1e1e (rgb 52,56,61) - button hover
+ * - Base/Body: #000000 (rgb 0,0,0) - main dark background
+ * - Header: #0a0a0a (rgb 10,10,10) - top navigation bar
+ * - Hover solid: #1e1e1e (rgb 30,30,30) - button hover
  * - Hover subtle: rgba(249, 250, 250, 0.02) - row hover
  * - Hover medium: rgba(249, 250, 250, 0.04) - tertiary hover
  * - Hover strong: rgba(249, 250, 250, 0.07) - input hover
  * 
  * TEXT COLORS:
  * - Primary: #DEE0E3 (rgb 222,224,227) - main text
- * - Secondary: #c2c7cd (rgb 183,188,194) - labels
+ * - Secondary: #c2c7cd (rgb 194,199,205) - labels
  * - Bright: #F9FAFA (rgb 249,250,250) - headings/emphasis
  * - Muted: rgba(255, 255, 255, 0.65) - sidebar text
  * - Tertiary: #737C87 (rgb 115,124,135) - disabled/hints

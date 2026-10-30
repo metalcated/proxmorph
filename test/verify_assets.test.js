@@ -117,12 +117,12 @@ for (const file of pveThemeFiles.filter((name) => !name.startsWith('theme-unifi'
     );
     assert.match(
         source,
-        /^\.x-treelist-item-selected > \.x-treelist-row \.x-treelist-item-text,/m,
+        /^\.x-treelist-item-selected > \.x-treelist-row(?: > \.x-treelist-item-wrap >)? \.x-treelist-item-text,/m,
         `${file} scopes selected text color to the selected item's direct row`,
     );
     assert.match(
         source,
-        /^\.x-treelist-item-selected > \.x-treelist-row \.x-treelist-item-icon[, {]/m,
+        /^\.x-treelist-item-selected > \.x-treelist-row(?: > \.x-treelist-item-wrap >)? \.x-treelist-item-icon[, {]/m,
         `${file} scopes selected icon color to the selected item's direct row`,
     );
 }

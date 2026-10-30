@@ -2,7 +2,7 @@
 /*
  * ProxMorph Theme: Enterprise Slate
  * A professional, vCenter/Clarity-inspired virtualization workspace
- * Version: 1.1.1
+ * Version: 1.1.2
  *
  * Built on ProxMorph's audited PVE/PBS ExtJS component coverage, then
  * reshaped around enterprise-console density, hierarchy, and restrained
@@ -821,6 +821,10 @@ div[id^="pveResourceTree"] .x-grid-cell {
 .x-form-trigger-wrap-default.x-form-trigger-wrap-focus {
     border-color: var(--pm-accent) !important;
     box-shadow: 0 0 0 3px var(--pm-accent-subtle) !important;
+}
+
+.x-form-trigger-wrap-default.x-form-trigger-wrap-invalid {
+    border-color: var(--pm-error) !important;
 }
 
 .x-form-item-label-default, .x-form-cb-label-default {
@@ -1933,9 +1937,12 @@ a.x-monthpicker-item-inner:hover, div.x-datepicker-date:hover {
     background: var(--pm-bg-base);
 }
 
-* {
-    scrollbar-width: thin;
-    scrollbar-color: var(--pm-border) var(--pm-bg-base);
+/* Keep fractional native scrollbar widths out of Chromium's ExtJS layouts. */
+@supports not selector(::-webkit-scrollbar) {
+    * {
+        scrollbar-width: thin;
+        scrollbar-color: var(--pm-border) var(--pm-bg-base);
+    }
 }
 
 /* ===== SELECTION HIGHLIGHT ===== */

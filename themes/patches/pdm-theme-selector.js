@@ -1,6 +1,6 @@
 /*
  * ProxMorph PDM Theme Selector Patch
- * Version: 1.0.0
+ * Version: 1.0.1
  *
  * Injects ProxMorph theme options into PDM's native Theme dialog dropdown.
  * Uses MutationObserver to detect when the dialog opens and adds custom
@@ -18,7 +18,8 @@
     for (var i = 0; i < themeLinks.length; i++) {
         var href = themeLinks[i].getAttribute('href');
         var filename = href.split('/').pop();
-        var name = filename.replace('theme-', '').replace('.css', '')
+        // Installer passes the /*!Title*/ header as data-title; derive from the file name otherwise.
+        var name = themeLinks[i].getAttribute('data-title') || filename.replace('theme-', '').replace('.css', '')
             .split('-').map(function(w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(' ');
         themes.push({ filename: filename, display: 'PM: ' + name, link: themeLinks[i] });
     }
@@ -133,7 +134,7 @@
         sepTd.setAttribute('colspan', '2');
         sepTd.style.cssText = 'padding:4px 0;border-top:1px solid var(--pwt-color-neutral-40,#555);';
         var sepDiv = document.createElement('div');
-        sepDiv.style.cssText = 'font-size:11px;color:var(--pwt-color-neutral-60,#999);padding:2px 8px;';
+        sepDiv.style.cssText = 'font-size:11px;color:var(--pwt-color-on-surface,#999);padding:2px 8px;';
         sepDiv.textContent = 'ProxMorph Themes';
         sepTd.appendChild(sepDiv);
         sepRow.appendChild(sepTd);

@@ -26,7 +26,9 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **No-write dry run**: accepts `--dry-run` before or after supported commands; validates runtime and backup integrity, resolves restore IDs, and previews planned backup/file/package/service/remote-node actions without creating even an operation lock.
 
 ### Changed
-- Bumped the installer version to 2.21.4.
+- Bumped the customized installer version to 2.22.0, incorporating upstream 2.9.0 through `305cf71`.
+- **Upstream integration**: retains authenticated inventory preferences, Enterprise Slate, noVNC, and transactional recovery. New automatic-theme and custom-font commands participate in safety backups, restore/uninstall, operation locking, no-write dry runs, and the persistent menu; compatibility remains menu option 9.
+- **OLED tooling portability**: generation works with older Debian mawk as well as modern awk.
 - **Enterprise Slate interaction palette**: reserves its darker cyan-blue for primary actions, links, meters, and deliberate hover states. Selection surfaces are now neutral blue-gray, form and keyboard focus use a slate border, and the stationary Documentation action keeps a restrained dark outline.
 - **Transactional novnc-pve coverage**: compatibility preflight, dry run, full backup/restore, uninstall, package-version guards, and the APT update hook now cover the noVNC template and ProxMorph console assets.
 - **Simplified PVE sensor setup**: replaces the manual `apt install lm-sensors && sensors-detect` prerequisite and sensor-filter follow-up with one informed opt-in. ProxMorph installs `lm-sensors` noninteractively, reuses existing readings, and only runs `sensors-detect --auto` when required; individual filtering remains available through `sensors configure`.
@@ -61,6 +63,51 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **Missing Connections vNets**: supplements the native cluster resource feed, which contains zones and fabrics but omits vNet configuration records, while preserving a safe zones/fabrics-only fallback if the endpoint or UI contracts change.
 - **PDM Catppuccin Frappé and Macchiato**: restored the missing dark-mode semantic selector so their surface variables are valid CSS and apply on Proxmox Datacenter Manager.
 - **Stale PDM restore protection**: `reinstall` no longer copies the original first-install `index.hbs` over a newer PDM package; it restores the currently installed UI package before reapplying themes.
+
+## [2.9.0] - 2026-10-29
+
+**Upgrading from 2.8.2 or older:** `./install.sh update` runs the old installer, which labels the install with its own version, so `status` still shows the old version although the 2.9.0 themes are in place. Run `./install.sh update` a second time, or update with the one-liner from the README.
+
+### Added
+
+- **ESXi Light theme.** An ESXi-inspired light theme with slate headers, bundled Clarity City fonts, outlined icons, matching charts and an optional resource-tree toggle, for PVE and PBS. PDM gets the palette without the fonts. Theme by [@rufftruffles](https://github.com/rufftruffles) ([#59](https://github.com/IT-BAER/proxmorph/pull/59)).
+- **Automatic light/dark.** `./install.sh auto-theme enable` adds "(Auto)" entries for UniFi, UniFi OLED, Nord, Gruvbox, Solarized and Catppuccin. Each entry follows the system color scheme live, without a reload, and the UniFi chart colors follow it too. `disable` removes the entries. PVE and PBS ([#53](https://github.com/IT-BAER/proxmorph/issues/53)).
+- **Custom UI font.** `./install.sh font <family> [file|url]` sets the text font for every theme. A WOFF2, WOFF, TTF or OTF file (local path or https URL, up to 4 MB) is embedded into the generated stylesheet, so browsers load nothing from the internet; with a family name only, the font must be installed on the viewing machine. Only the text selectors are targeted, so FontAwesome and the status icons keep working. On PDM the selectors are read from the installed PDM stylesheets and refreshed after PDM updates. `./install.sh font none` removes it. PVE, PBS and PDM. Idea and icon-safe selector design by [@HyperNova7326](https://github.com/HyperNova7326) ([#58](https://github.com/IT-BAER/proxmorph/issues/58)).
+
+### Fixed
+
+- **PDM: apt hook copied the theme selector script to `/`.** The generated `post-update.sh` used `PDM_JS_PATCHES_DIR` without defining it, so after a PDM update it put `pdm-theme-selector.js` into the root directory instead of the PDM patches directory.
+- **`update` could leave the host without the apt hook script.** The installer emptied `/opt/proxmorph` before extracting the new release. When extraction failed, for example in an unprivileged container that cannot apply the archive's file owners, `post-update.sh` was gone and the next Proxmox update did not re-apply the themes. The release is now extracted first, without restoring file owners, and the installed version stays in place if that fails.
+- **Theme visual audit.** ExtJS two-column layouts no longer wrap at scaling other than 100 %. Disabled toolbar labels stay readable, invalid form fields show their red border again, and unchecked checkboxes are visible in Gruvbox, Nord and Tokyo Night. Primary buttons use palette hover colors in seven themes, including a readable Blue Slate hover. UniFi Light shows dark text on selected grid and tree rows and readable empty-grid text. Gruvbox Light uses dark text on accents and readable link and info text. ESXi Light keeps its tab colors under keyboard focus. On PDM, the sorted column header is readable in Gruvbox Light, ESXi Light and UniFi, the "ProxMorph Themes" heading in the Theme dialog is readable, and Catppuccin Frappe and Macchiato have their semantic color block back.
+- **Sensor hints named a command that does not exist.** Three messages pointed to `install.sh manage-sensors`; they now name `install.sh sensors enable` and `install.sh sensors configure`.
+
+### Changed
+
+- **PDM theme selector shows the theme's display name** from its `/*!Name*/` header, for example "PM: ESXi Light" instead of a name built from the file name.
+
+## [2.8.4] - 2026-09-23
+
+### Fixed
+
+- **PVE node Summary stuck on "Loading..." after switching node tabs.** The sensor overlay hooked the node status store with `store.on('load')`, but that store belongs to the node panel and outlives the Summary view, which PVE destroys on every tab switch. After Summary → any other node tab → Summary, the listener of the destroyed view threw `can't access property "items", f.items is null` (`proxmorph-sensors.js:405`) on each status poll, and ExtJS skipped the new view's own listener, so the status panel never filled. The listener is now bound with `me.mon()` and removed together with the view. This also hit hosts that declined sensor monitoring, because the sensor script always loads and only hides its row. Reported by [@binse03](https://github.com/binse03) ([#57](https://github.com/IT-BAER/proxmorph/issues/57)).
+- **One-liner `install` aborted silently on a fresh host.** With neither a local `themes/` directory nor the `/opt/proxmorph` cache present, a failed lookup tripped `set -e` and ended the installer right after product detection. It now falls through to downloading the release.
+
+## [2.8.3] - 2026-08-20
+
+### Fixed
+
+- **PDM UniFi OLED rendered as plain UniFi dark.** `themes/pdm/theme-unifi-oled.css` described the OLED palette in its header, but every `rgb(...)` declaration in it was identical to `themes/pdm/theme-unifi.css`, so picking `PM: Unifi Oled` changed nothing on screen. The OLED substitutions had been written as hex values while PDM keeps its operative palette in `rgb()`, so none of them landed on a color token. PDM now gets true-black base surfaces, a grayscale elevated ramp, and the `#1e85ff` accent. Reported and fixed by [@SnowyyCodes](https://github.com/SnowyyCodes) ([#55](https://github.com/IT-BAER/proxmorph/pull/55)).
+- **`install` reinstalled stale themes.** `bash <(curl ... install.sh) install`, the README one-liner, runs from process substitution, so the installer could not see a `themes/` directory next to itself and fell back to the cached copy in `/opt/proxmorph/themes` left by the previously installed version. On a machine that already had ProxMorph, that reinstalled the old CSS: the 2.8.2 nav-subsection fix ([#54](https://github.com/IT-BAER/proxmorph/issues/54)) and the UniFi OLED theme added in 2.8.0 never reached anyone who updated with `install` instead of `update`. `install` now fetches the release when there are no local theme files.
+- **Reported version could not be trusted.** The installer stamped `/opt/proxmorph/.version` with the version of the script being run rather than the version of the themes it copied, so `status` showed `v2.8.2` on a host still running 2.7-era CSS. It now keeps the version recorded by the download and only labels installs made from a local checkout.
+
+### Changed
+
+- **UniFi OLED themes are generated, not hand-edited.** `tools/gen-oled.sh` derives `themes/theme-unifi-oled.css` and `themes/pdm/theme-unifi-oled.css` from their UniFi bases through per-product substitution tables (`tools/oled-palette-pve.tsv`, `tools/oled-palette-pdm.tsv`); PVE/PBS and PDM need separate tables because PDM stores its palette in `rgb()` and PVE/PBS in hex. `bash tools/gen-oled.sh --check` and `bash test/oled_sync.test.sh` fail when a base changes without its OLED variant being regenerated, or when an OLED theme is a straight copy of its base. Developer tooling only; not shipped in the release archive.
+
+## [2.8.2] - 2026-08-03
+
+### Fixed
+- **All themes except the UniFi family** — Expanding a nav section in an LXC or VM (Firewall, and any other section with children) no longer makes its subsections invisible. The selected item's on-accent text color was set with a descendant selector, `.x-treelist-item-selected .x-treelist-item-text`, but ExtJS nests child items inside the selected `<li>`, so children were painted the same dark color as the panel background. Scoped to the item's own row, `.x-treelist-item-selected > .x-treelist-row .x-treelist-item-text`. Affects LXC and VM alike. Issue [#54](https://github.com/IT-BAER/proxmorph/issues/54)
 
 ## [2.8.1] - 2026-07-19
 

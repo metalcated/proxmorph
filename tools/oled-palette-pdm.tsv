@@ -1,0 +1,32 @@
+# OLED substitution table for the PDM UniFi theme (themes/pdm/theme-unifi.css).
+# Columns are tab separated: kind<TAB>from<TAB>to
+#
+# PDM keeps its operative palette in rgb() declarations and only names colors in
+# hex inside comments, so the two kinds never collide and are listed separately.
+# A hex-only table (the PVE recipe) silently misses every declaration here.
+
+# Header comment palette.
+hex	#131416	#000000
+hex	#282B2F	#0a0a0a
+hex	#34383D	#1e1e1e
+hex	#006EFF	#1e85ff
+
+# Tonal rungs: neutral, neutral-alt and secondary collapse onto one grayscale
+# ladder (30/20/15/10/5) anchored on true black.
+rgb	52,56,61	30,30,30
+rgb	48,54,64	30,30,30
+rgb	40,43,47	20,20,20
+rgb	35,40,48	20,20,20
+rgb	32,35,38	15,15,15
+rgb	26,30,36	15,15,15
+rgb	28,30,34	10,10,10
+rgb	24,26,30	10,10,10
+rgb	18,20,26	10,10,10
+rgb	16,17,20	5,5,5
+rgb	10,12,16	5,5,5
+rgb	19,20,22	0,0,0
+rgb	12,12,14	0,0,0
+
+# Accent and secondary text, matching the PVE OLED values.
+rgb	0,110,255	30,133,255
+rgb	183,188,194	194,199,205

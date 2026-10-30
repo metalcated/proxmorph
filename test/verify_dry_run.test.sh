@@ -29,6 +29,9 @@ INSTALL_DIR="${work}/opt/proxmorph"
 INSTALLED_PATHS_FILE="${INSTALL_DIR}/.installed-paths"
 CONFIG_DIR="${work}/etc/proxmorph"
 DEFAULT_THEME_FILE="${CONFIG_DIR}/default-theme"
+AUTO_THEME_FILE="${CONFIG_DIR}/auto-themes"
+FONT_FILE="${CONFIG_DIR}/font"
+FONT_CSS="${CONFIG_DIR}/font.css"
 APT_HOOK_FILE="${work}/etc/apt/99proxmorph"
 POST_INVOKE_SCRIPT="${INSTALL_DIR}/post-update.sh"
 PROXMORPH_LOG_FILE="${work}/var/log/proxmorph.log"
@@ -142,6 +145,14 @@ check 'sensor enable dry run previews lm-sensors installation' yes "$(grep -qF '
 check 'sensor enable dry run previews automatic detection' yes "$(grep -qF '[hardware probe] sensors-detect --auto' <<< "$sensor_preview" && echo yes || echo no)"
 
 saved_backup_root="$BACKUP_ROOT"
+for optional_command in 'auto-theme enable' 'auto-theme disable' 'font Inter' 'font none'; do
+    before=$(tree_snapshot)
+    optional_preview=$(dry_run_dispatch $optional_command)
+    optional_rc=$?
+    after=$(tree_snapshot)
+    check "$optional_command dry run succeeds" 0 "$optional_rc"
+    check "$optional_command dry run leaves all files unchanged" "$before" "$after"
+done
 BACKUP_ROOT="${work}/no-backups"
 before=$(tree_snapshot)
 fallback_preview=$(preview_uninstall_operation)

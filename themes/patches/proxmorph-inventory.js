@@ -13,7 +13,7 @@
  * protected API and the replicated Proxmox cluster filesystem. The selected
  * view itself continues to use Proxmox's native URL state.
  *
- * Version: 1.9.6
+ * Version: 1.10.0
  */
 (function () {
     'use strict';
@@ -24,7 +24,7 @@
     var CONNECTIVITY_VIEW_KEY = 'proxmorph-connectivity';
     var VNET_TYPE = 'proxmorph-vnet';
     var VNETS_URL = '/cluster/sdn/vnets';
-    var VERSION = '1.9.6';
+    var VERSION = '1.10.0';
     var PREFERENCES_URL = '/proxmorph/preferences';
     var MAX_INIT_ATTEMPTS = 40;
     var initAttempts = 0;
@@ -1522,6 +1522,7 @@
                 'html body .x-form-trigger-wrap-default .x-form-text-default { box-sizing: border-box !important; height: calc(var(--proxmorph-control-height) - 2px) !important; line-height: calc(var(--proxmorph-control-height) - 2px) !important; padding-top: 0 !important; padding-bottom: 0 !important; }',
                 'html body .x-form-trigger-wrap-default .x-form-trigger-default { height: calc(var(--proxmorph-control-height) - 2px) !important; }',
                 'html body .x-form-trigger-wrap-default.x-form-trigger-wrap-focus { border-color: var(--pm-focus-border, var(--pm-accent, var(--gh-accent-fg, #006eff))) !important; box-shadow: 0 0 0 3px var(--pm-focus-ring, color-mix(in srgb, var(--pm-accent, var(--gh-accent-fg, #006eff)) 18%, transparent)) !important; }',
+                'html body .x-form-trigger-wrap-default.x-form-trigger-wrap-invalid { border-color: var(--pm-error, var(--gh-danger-fg, #e05252)) !important; }',
             ].join('\n')),
             'proxmorph-inventory-navigation-style',
         );

@@ -2,6 +2,7 @@
 
 # Local-only config, notes & planning
 .claude/
+.mcp.json
 context.md
 references/
 CLAUDE.md

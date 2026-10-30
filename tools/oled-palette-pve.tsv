@@ -1,0 +1,24 @@
+# OLED substitution table for the PVE/PBS UniFi theme (themes/theme-unifi.css).
+# Columns are tab separated: kind<TAB>from<TAB>to
+# kind=hex  case-insensitive #RRGGBB literal
+# kind=rgb  decimal triple inside rgb(), whitespace-insensitive
+# kind=lit  exact token, for rgba() where the alpha changes too
+#
+# Backgrounds: base goes true black, surfaces drop to a near-black ladder.
+hex	#131416	#000000
+hex	#282B2F	#0a0a0a
+hex	#34383D	#1e1e1e
+hex	#151725	#0a0a0a
+hex	#1a1c22	#0a0a0a
+hex	#1C1E21	#0a0a0a
+hex	#22252d	#141414
+hex	#23262A	#141414
+hex	#242635	#141414
+hex	#2a2d36	#141414
+# Secondary text lifts to stay legible against true black.
+hex	#B7BCC2	#c2c7cd
+# Accent brightens; the focus ring also needs more alpha over black.
+# The base ships two near-identical blues (#006EFF and #006fff); both map across.
+hex	#006EFF	#1e85ff
+lit	rgba(0, 111, 255, 0.15)	rgba(30, 133, 255, 0.28)
+hex	#006fff	#1e85ff
