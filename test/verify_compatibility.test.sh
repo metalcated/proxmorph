@@ -135,6 +135,31 @@ check 'cluster preferences registration is singular' 1 "$(grep -cF "$PVE_CLUSTER
 check 'API route registration is singular' 1 "$(grep -cF "$PVE_API_PREFS_MARKER" "$PVE_API2_PM")"
 grep -qF "path => 'proxmorph'," "$PVE_API2_PM"
 check 'API route patch preserves its Perl string quoting' 0 "$?"
+
+# Reproduce running ./install.sh from /opt/proxmorph: the source is relative,
+# but the destination is the absolute path to the same cached file.
+cp "${HERE}/../install.sh" "${INSTALL_DIR}/install.sh"
+ln -s install.sh "${INSTALL_DIR}/installer-alias.sh"
+for cached_script in ./install.sh ./installer-alias.sh; do
+    (
+        cd "${work}/install" || exit 1
+        source "$cached_script" >/dev/null 2>&1
+        set -Ee
+        PRODUCT=PVE
+        INSTALL_DIR="${work}/install"
+        INSTALLED_PATHS_FILE="${INSTALL_DIR}/.installed-paths"
+        PVE_CLUSTER_PM="${work}/Cluster.pm"
+        PVE_API2_PM="${work}/API2.pm"
+        PVE_PROXMORPH_API_PM="${work}/ProxMorph.pm"
+        PVE_PREFERENCES_FILE="${work}/proxmorph-user-preferences.json"
+        perl() { return 0; }
+        sync_installer_to_cache
+        install_pve_preferences_api
+    ) >/dev/null 2>&1
+    check "cached $cached_script re-applies preferences without a self-copy" 0 "$?"
+done
+check 'cached reapply retains one cluster registration' 1 "$(grep -cF "$PVE_CLUSTER_PREFS_MARKER" "$PVE_CLUSTER_PM")"
+check 'cached reapply retains one API registration' 1 "$(grep -cF "$PVE_API_PREFS_MARKER" "$PVE_API2_PM")"
 novnc_source="${work}/themes"
 mkdir -p "${novnc_source}/novnc"
 printf '%s\n' '(function () {})();' > "${novnc_source}/novnc/proxmorph-novnc.js"

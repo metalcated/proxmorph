@@ -82,12 +82,15 @@ Comparison between default Proxmox Dark theme and UniFi theme:
 This branch includes the upstream 2.9.0 themes plus account-saved Inventory View, Enterprise Slate, noVNC enhancements, and transactional backup/restore. Install from this checkout to retain those additions:
 
 ```bash
-git clone --branch feature/proxmox-9-sidebar-inventory https://github.com/metalcated/proxmorph.git
-cd proxmorph
+git clone --branch feature/proxmox-9-sidebar-inventory https://github.com/metalcated/proxmorph.git /root/proxmorph-source &&
+cd /root/proxmorph-source &&
+./install.sh install --dry-run &&
 ./install.sh install
 ```
 
 For an existing checkout on this branch, use `git pull --ff-only origin feature/proxmox-9-sidebar-inventory` followed by `./install.sh install`. The install creates a safety backup before changing managed files. The generic `update` command and upstream release commands below download IT-BAER releases, which do not contain this fork's server modules and inventory extensions; use the checkout workflow for this branch.
+
+`/opt/proxmorph` is the installed runtime cache, not a Git checkout. Keep the source checkout in a separate directory such as `/root/proxmorph-source`; `git pull` cannot update `/opt/proxmorph` without a `.git` directory. Use `&&` between the pull, preview, and install commands so a failed update stops the sequence before the old cached installer runs.
 
 ### Upstream release install
 

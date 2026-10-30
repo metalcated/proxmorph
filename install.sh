@@ -15,7 +15,7 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Configuration
-VERSION="2.22.0"
+VERSION="2.22.1"
 TARGET_VERSION="$VERSION"
 WIDGET_TOOLKIT_DIR="/usr/share/javascript/proxmox-widget-toolkit"
 THEMES_DIR="${WIDGET_TOOLKIT_DIR}/themes"
@@ -1907,7 +1907,8 @@ install_pve_preferences_api() {
     }
 
     mkdir -p "$(dirname "$cached_source")"
-    if [[ "$source" != "$cached_source" ]]; then
+    # Relative paths, symlinks, and absolute cache paths may name one file.
+    if [[ ! "$source" -ef "$cached_source" ]]; then
         cp "$source" "$cached_source"
     fi
 
@@ -4090,7 +4091,7 @@ sync_installer_to_cache() {
     local installer_source="${BASH_SOURCE[0]:-}"
     mkdir -p "$INSTALL_DIR"
     if [[ -n "$installer_source" && -f "$installer_source" && "$RELEASE_DOWNLOADED" != "true" && \
-          "$(cd "$(dirname "$installer_source")" 2>/dev/null && pwd)/$(basename "$installer_source")" != "${INSTALL_DIR}/install.sh" ]]; then
+          ! "$installer_source" -ef "${INSTALL_DIR}/install.sh" ]]; then
         cp "$installer_source" "${INSTALL_DIR}/install.sh"
     fi
     [[ -f "${INSTALL_DIR}/install.sh" ]] && chmod 755 "${INSTALL_DIR}/install.sh"
@@ -4167,7 +4168,7 @@ install_themes() {
     # PDM uses a completely different installation approach (CSS injection via index.hbs)
     if [[ "$PRODUCT" == "PDM" ]]; then
         # Sync to local cache
-        if [[ "$themes_source" != "${INSTALL_DIR}/themes/pdm" ]]; then
+        if [[ ! "$themes_source" -ef "${INSTALL_DIR}/themes/pdm" ]]; then
             mkdir -p "${INSTALL_DIR}/themes/pdm"
             cp "$themes_source"/theme-*.css "${INSTALL_DIR}/themes/pdm/" 2>/dev/null || true
             [[ -f "${themes_source}/proxmorph-pdm-base.css" ]] && cp "${themes_source}/proxmorph-pdm-base.css" "${INSTALL_DIR}/themes/pdm/"
@@ -4227,7 +4228,7 @@ install_themes() {
             record_installed_path "${THEMES_DIR}/$(basename "$css_file")"
             
             # Sync to local cache so apt hook uses the newest files on update
-            if [[ "$themes_source" != "${INSTALL_DIR}/themes" && "$themes_source" != "${INSTALL_DIR}/themes/pdm" ]]; then
+            if [[ ! "$themes_source" -ef "${INSTALL_DIR}/themes" && ! "$themes_source" -ef "${INSTALL_DIR}/themes/pdm" ]]; then
                 if [[ "$PRODUCT" == "PDM" ]]; then
                     mkdir -p "${INSTALL_DIR}/themes/pdm"
                     cp "$css_file" "${INSTALL_DIR}/themes/pdm/"
@@ -4246,11 +4247,11 @@ install_themes() {
     done
     
     # Sync JavaScript patches to cache if installing locally
-    if [[ -d "${themes_source}/patches" && "$themes_source" != "${INSTALL_DIR}/themes" ]]; then
+    if [[ -d "${themes_source}/patches" && ! "$themes_source" -ef "${INSTALL_DIR}/themes" ]]; then
         mkdir -p "${INSTALL_DIR}/themes/patches"
         cp "${themes_source}/patches"/*.js "${INSTALL_DIR}/themes/patches/" 2>/dev/null || true
     fi
-    if [[ "$PRODUCT" == "PVE" && -d "${themes_source}/novnc" && "$themes_source" != "${INSTALL_DIR}/themes" ]]; then
+    if [[ "$PRODUCT" == "PVE" && -d "${themes_source}/novnc" && ! "$themes_source" -ef "${INSTALL_DIR}/themes" ]]; then
         mkdir -p "${INSTALL_DIR}/themes/novnc"
         cp "${themes_source}/novnc/proxmorph-novnc.js" "${INSTALL_DIR}/themes/novnc/"
         cp "${themes_source}/novnc/proxmorph-novnc.css" "${INSTALL_DIR}/themes/novnc/"
