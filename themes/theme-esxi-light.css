@@ -1,9 +1,10 @@
 /*!ESXi Light*/
-/* ProxMorph ESXi Light 1.1.6
+/* ProxMorph ESXi Light 1.1.7
  * An independent ESXi/Clarity-inspired skin for the native Proxmox VE UI.
  * Layout, visibility, status glyphs and console palettes remain application-owned.
  * Clarity City fonts are embedded locally. No remote assets or layout-position overrides.
  *
+ * v1.1.7: Light foregrounds for the slate inventory switcher and selected object navigation, scoped to their direct controls and rows.
  * v1.1.6: Keep button, arrow, inline-icon and selected-tab foregrounds paired with their light or dark surfaces under shared PVE styling.
  * v1.1.5: Standard scrollbar props only in Firefox; in Chrome they made ExtJS wrap two-column Summary/dashboard layouts to one column at non-100% display scaling
  *         Keyboard-focused tabs keep their colors (stock focus blue made the active tab label 2.1:1)
@@ -140,6 +141,22 @@ a:hover { color: var(--pm-accent-hover); }
 .pmx-info-column .x-container { font-variant-numeric: tabular-nums; }
 
 /* 04 / Resource tree and section navigation. Child selections are deliberately scoped. */
+/* The inventory switcher sits on the slate west panel, outside the header.
+ * Keep its six outlined buttons transparent and give the active icon a pale
+ * accent that remains visible on that surface. Tokens are local to each button.
+ */
+.x-box-target:has(#view) > .x-btn.x-btn-default-toolbar-small {
+    --pm-accent: #bfe9ff;
+    --proxmorph-modern-hover: transparent;
+    --proxmorph-modern-selected: transparent;
+}
+.x-box-target:has(#view) > .x-btn.x-btn-default-toolbar-small .x-btn-icon-el {
+    color: var(--pm-header-text) !important;
+}
+.x-box-target:has(#view) > .x-btn.x-btn-default-toolbar-small.x-btn-pressed .x-btn-icon-el {
+    color: var(--pm-accent) !important;
+}
+
 .x-tree-panel .x-grid-body, .x-tree-panel .x-grid-view { background: var(--pm-bg-surface); }
 .x-tree-panel .x-grid-item { background: transparent; }
 .x-tree-panel .x-grid-cell { border-color: transparent; }
@@ -163,7 +180,7 @@ a:hover { color: var(--pm-accent-hover); }
 .x-treelist-item-selected > .x-treelist-row > .x-treelist-item-wrap > .x-treelist-item-text,
 .x-treelist-item-selected > .x-treelist-row > .x-treelist-item-wrap > .x-treelist-item-icon,
 .x-treelist-item-selected > .x-treelist-row > .x-treelist-item-expander {
-    color: #ffffff;
+    color: var(--pm-header-text) !important;
     font-weight: 600;
 }
 .x-treelist-item-tool, .x-treelist-floater { background: var(--pm-bg-surface); }
