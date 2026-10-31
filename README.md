@@ -6,6 +6,7 @@ Custom themes for Proxmox VE (PVE), Proxmox Backup Server (PBS), and Proxmox Dat
 
 - **Native Integration** - Themes appear in built-in Color Theme dropdown (PVE, PBS, and PDM)
 - **Auto-Patch on Updates** - Automatically re-applies themes after product updates
+- **Automatic Browser Cache Refresh** - Changed ProxMorph scripts and styles get content-versioned URLs, so an ordinary page reload picks up an upgrade without clearing browser storage
 - **Hybrid Engine** - CSS for styling + JavaScript for dynamic chart patching
 - **Server-Side Default Theme** - Pick a default for browsers that have not chosen one yet; a user's own selection always wins
 - **Automatic Light/Dark** - Opt-in "(Auto)" entries per collection that follow the system color scheme live (PVE, PBS)
@@ -14,6 +15,8 @@ Custom themes for Proxmox VE (PVE), Proxmox Backup Server (PBS), and Proxmox Dat
 - **Inventory View** - Optional node/pool guest hierarchies and vCenter-style icon views with modal controls (PVE)
 - **Enterprise Slate** - Flagship enterprise-console theme with vCenter/Clarity-inspired hierarchy, neutral blue-gray selection, and restrained dark cyan-blue actions (PVE, PBS, and PDM)
 - **Easy Installation** - Single command installation for PVE, PBS, and PDM
+
+After upgrading ProxMorph on a node, reload that node's web UI normally. The installer and APT update hook version browser asset URLs from the installed file contents, including themes, scripts, automatic light/dark imports, custom fonts, and noVNC enhancements. An already-open page still needs a reload; this does not hot-replace code in an active console or change saved preferences. Unchanged assets retain stable cache keys, and backup/restore reinstates the matching files and URLs together.
 
 ## 📸 Screenshot
 

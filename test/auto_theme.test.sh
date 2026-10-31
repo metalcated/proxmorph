@@ -58,12 +58,17 @@ check "six auto themes generated" \
 check "dropdown title comes from the pair table" "/*!UniFi (Auto)*/" \
       "$(head -1 "${gen}/theme-unifi-auto.css")"
 check "light import is media-conditioned" \
-      "@import url(\"theme-nord-light.css?ver=${VERSION}\") (prefers-color-scheme: light);" \
+      "@import url(\"theme-nord-light.css?ver=$(asset_fingerprint "${gen}/theme-nord-light.css")\") (prefers-color-scheme: light);" \
       "$(sed -n 2p "${gen}/theme-nord-auto.css")"
 check "dark import is media-conditioned" \
-      "@import url(\"theme-nord-dark.css?ver=${VERSION}\") (prefers-color-scheme: dark);" \
+      "@import url(\"theme-nord-dark.css?ver=$(asset_fingerprint "${gen}/theme-nord-dark.css")\") (prefers-color-scheme: dark);" \
       "$(sed -n 3p "${gen}/theme-nord-auto.css")"
 check "generated file has no fourth line" "3" "$(wc -l < "${gen}/theme-nord-auto.css" | tr -d ' ')"
+old_import="$(sed -n 2p "${gen}/theme-nord-auto.css")"
+printf '/* changed light member without an installer bump */\n' >> "${gen}/theme-nord-light.css"
+generate_auto_themes "$gen" >/dev/null
+check "changed member refreshes its automatic import URL" "yes" \
+      "$([[ "$old_import" != "$(sed -n 2p "${gen}/theme-nord-auto.css")" ]] && echo yes || echo no)"
 
 # Every key must pass pveproxy's cookie filter: ^[a-z]{1,10}(-[a-z]{1,10}){0,5}$
 bad=""
@@ -121,6 +126,16 @@ check "failed enable removes generated live themes" "0" "$(ls "${THEMES_DIR}"/th
 check "failed enable restores the setting" "no" "$([[ -f "$AUTO_THEME_FILE" ]] && echo yes || echo no)"
 manage_auto_theme enable >/dev/null 2>&1
 check "retry succeeds after rollback" "yes" "$([[ -f "${THEMES_DIR}/theme-unifi-auto.css" ]] && echo yes || echo no)"
+# Single-theme upgrades must also refresh automatic imports of the changed CSS.
+mkdir -p "${work}/incoming"
+printf '/*!Nord Light*/\nbody { color: blue; }\n' > "${work}/incoming/theme-nord-light.css"
+validate_runtime_contracts() { :; }
+nohup() { :; }
+install_single_theme "${work}/incoming/theme-nord-light.css" >/dev/null 2>&1
+check "single-theme upgrade refreshes the automatic import" "yes" \
+      "$(grep -qF "theme-nord-light.css?ver=$(asset_fingerprint "${THEMES_DIR}/theme-nord-light.css")" "${THEMES_DIR}/theme-nord-auto.css" && echo yes || echo no)"
+check "single-theme upgrade mirrors the automatic wrapper into the recovery cache" "yes" \
+      "$(cmp -s "${THEMES_DIR}/theme-nord-auto.css" "${INSTALL_DIR}/themes/theme-nord-auto.css" && echo yes || echo no)"
 manage_auto_theme disable >/dev/null 2>&1
 manage_auto_theme status >/dev/null 2>&1
 check "status does not enable" "no" "$([[ -f "$AUTO_THEME_FILE" ]] && echo yes || echo no)"

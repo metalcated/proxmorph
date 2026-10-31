@@ -15,7 +15,7 @@ MAGENTA='\033[0;35m'
 NC='\033[0m' # No Color
 
 # Configuration
-VERSION="2.22.4"
+VERSION="2.22.5"
 TARGET_VERSION="$VERSION"
 WIDGET_TOOLKIT_DIR="/usr/share/javascript/proxmox-widget-toolkit"
 THEMES_DIR="${WIDGET_TOOLKIT_DIR}/themes"
@@ -214,6 +214,11 @@ validate_runtime_contracts() {
     local package_version=""
 
     print_info "Checking ${PRODUCT} runtime compatibility..."
+
+    if ! perl -MDigest::SHA -MFile::Temp -e 'exit 0' 2>/dev/null; then
+        print_error "Perl Digest::SHA and File::Temp are required for safe browser asset versioning"
+        errors=$((errors + 1))
+    fi
 
     case "$PRODUCT" in
         PVE)
@@ -1259,6 +1264,7 @@ preview_install_operation() {
         fi
     fi
     printf '  [write] %s (release cache and installed-path ledger)\n' "$INSTALL_DIR"
+    printf '  [cache versions] Refresh content-based script, theme, and configured font URLs in %s\n' "$INDEX_TEMPLATE"
     printf '  [write] %s\n' "$APT_HOOK_FILE"
     if font_configured; then
         printf '  [reapply configured font] %s\n' "$FONT_CSS"
@@ -1815,6 +1821,108 @@ patch_theme_map() {
     fi
 }
 
+# Keep browser cache keys tied to the installed bytes, including cached releases
+# and single-theme installs. Embed these same functions in the APT hook below.
+asset_fingerprint() {
+    local checksum=""
+    checksum=$(sha256sum -- "$1") || return 1
+    printf '%.16s\n' "$checksum"
+}
+
+refresh_browser_asset_versions() {
+    local mode="${1:-write}"
+    [[ -f "$INDEX_TEMPLATE" ]] || return 0
+    perl - "$mode" "$PRODUCT" "$INDEX_TEMPLATE" "$THEMES_DIR" "$PROXMOXLIB_JS" \
+        "$JS_PATCHES_DIR" "$NOVNC_INDEX_TPL" "$NOVNC_PROXMORPH_DIR" \
+        "$PDM_THEMES_DIR" "$PDM_JS_PATCHES_DIR" <<'ASSET_PERL'
+use strict;
+use warnings;
+use Digest::SHA qw(sha256_hex);
+use File::Temp qw(tempfile);
+my ($mode, $product, $index, $themes, $library, $scripts, $novnc_index,
+    $novnc, $pdm_themes, $pdm_scripts) = @ARGV;
+my (%versions, %collections);
+sub contents {
+    my ($file) = @_;
+    open my $input, '<:raw', $file or die "Cannot read browser asset $file: $!\n";
+    local $/;
+    my $data = <$input>;
+    close $input or die "Cannot close browser asset $file: $!\n";
+    return $data // '';
+}
+sub add_assets {
+    my ($directory, $prefix, $pattern) = @_;
+    return unless -d $directory;
+    opendir my $dir, $directory or die "Cannot list browser assets $directory: $!\n";
+    my @names = sort grep { /$pattern/ && -f "$directory/$_" } readdir $dir;
+    closedir $dir;
+    my $collection = '';
+    for my $name (@names) {
+        my $hash = sha256_hex(contents("$directory/$name"));
+        $versions{"$prefix/$name"} = substr($hash, 0, 16);
+        $collection .= "$name\0$hash\n";
+    }
+    $collections{$prefix} = substr(sha256_hex($collection), 0, 16) if @names;
+}
+if ($product eq 'PDM') {
+    add_assets($pdm_themes, '/proxmorph-themes', qr/\.css$/);
+    add_assets($pdm_scripts, '/js/proxmorph', qr/\.js$/);
+} else {
+    my $prefix = $product eq 'PVE' ? '/pwt/themes' : '/widgettoolkit/themes';
+    # Widget-toolkit's native theme-proxmox-* styles share this directory.
+    # They are not ProxMorph assets and must keep their package-owned URLs.
+    add_assets($themes, $prefix, qr/^(?:theme-(?!proxmox-).*\.css|proxmorph-font\.css)$/);
+    add_assets($scripts, $product eq 'PVE' ? '/pve2/js/proxmorph' : '/js/proxmorph', qr/\.js$/);
+    my $library_url = $product eq 'PVE' ? '/proxmoxlib.js' : '/widgettoolkit/proxmoxlib.js';
+    $versions{$library_url} = substr(sha256_hex(contents($library)), 0, 16) if -f $library;
+    add_assets($novnc, '/novnc/proxmorph', qr/\.(?:js|css)$/) if $product eq 'PVE';
+}
+sub version_url {
+    my ($url) = @_;
+    my ($path, $query, $fragment) = $url =~ /^([^?#]+)(?:\?([^#]*))?(#.*)?$/s;
+    return $url unless defined $path;
+    my $version = $versions{$path};
+    # PVE/PBS resolve the native selected-theme link on the server. Preserve
+    # their template expressions and package-version parameter verbatim.
+    if (!defined $version && $path =~ m{^(/(?:pwt|widgettoolkit)/themes)/theme-.*(?:\[%|\{\{).*\.css$}) {
+        $version = $collections{$1};
+    }
+    return $url unless defined $version;
+    my @query = grep { length && !/^pmver=/ } split /&(?:amp;)?/, $query // '';
+    return $path . '?' . join('&', @query, "pmver=$version") . ($fragment // '');
+}
+my @outputs;
+for my $file ($index, ($product eq 'PVE' && -f $novnc_index ? $novnc_index : ())) {
+    my $before = contents($file);
+    my $after = $before;
+    $after =~ s{(["'])(/[^"'\r\n<>]+)\1}{$1 . version_url($2) . $1}ge;
+    # The synchronous default-theme bootstrap builds its URL from a JS key.
+    # Use the collection key so a changed default CSS also invalidates it.
+    my $prefix = $product eq 'PVE' ? '/pwt/themes' : '/widgettoolkit/themes';
+    if (defined $collections{$prefix}) {
+        my $hash = $collections{$prefix};
+        $after =~ s{(\Q$prefix\E/theme-' \+ k \+ '\.css)(?:\?pmver=[0-9a-f]+)?}{$1?pmver=$hash}g;
+    }
+    next if $after eq $before;
+    push @outputs, [$file, $after];
+}
+exit(@outputs ? 1 : 0) if $mode eq '--check';
+die "Unknown browser asset refresh mode\n" unless $mode eq 'write';
+for my $output (@outputs) {
+    my ($file, $data) = @$output;
+    my @stat = stat $file;
+    my ($directory) = $file =~ m{^(.*)/[^/]+$};
+    my ($temp, $temporary) = tempfile('.proxmorph-assets-XXXXXX', DIR => $directory, UNLINK => 1);
+    binmode $temp;
+    print {$temp} $data or die "Cannot write browser asset references: $!\n";
+    close $temp or die "Cannot finish browser asset references: $!\n";
+    chmod($stat[2] & 07777, $temporary) or die "Cannot preserve template mode: $!\n";
+    chown($stat[4], $stat[5], $temporary) or die "Cannot preserve template ownership: $!\n";
+    rename($temporary, $file) or die "Cannot replace browser asset references: $!\n";
+}
+ASSET_PERL
+}
+
 # JavaScript Patches Configuration (Dynamic markers)
 JS_PATCH_MARKER="<!-- ProxMorph JS Patches -->"
 JS_PATCH_MARKER_END="<!-- /ProxMorph JS Patches -->"
@@ -2037,11 +2145,11 @@ install_novnc_clipboard() {
     temporary_block=$(mktemp)
     cat > "$temporary_block" << BLOCK
 ${NOVNC_PATCH_MARKER}
-<link rel="stylesheet" href="/novnc/proxmorph/proxmorph-novnc.css?ver=${TARGET_VERSION}">
+<link rel="stylesheet" href="/novnc/proxmorph/proxmorph-novnc.css?pmver=$(asset_fingerprint "${NOVNC_PROXMORPH_DIR}/proxmorph-novnc.css")">
 <script type="module">
 import ProxMorphUI from "${module_url}";
 window.ProxMorphNoVNCUI = ProxMorphUI;
-import("/novnc/proxmorph/proxmorph-novnc.js?ver=${TARGET_VERSION}");
+import("/novnc/proxmorph/proxmorph-novnc.js?pmver=$(asset_fingerprint "${NOVNC_PROXMORPH_DIR}/proxmorph-novnc.js")");
 </script>
 ${NOVNC_PATCH_MARKER_END}
 BLOCK
@@ -2140,7 +2248,7 @@ install_js_patches() {
             for js_file in "${JS_PATCHES_DIR}"/*.js; do
                 if [[ -f "$js_file" ]]; then
                     local js_name=$(basename "$js_file")
-                    script_tags="${script_tags}\n<script src=\"${js_web_path}/${js_name}\"></script>"
+                    script_tags="${script_tags}\n<script src=\"${js_web_path}/${js_name}?pmver=$(asset_fingerprint "$js_file")\"></script>"
                 fi
             done
             script_tags="${script_tags}\n${JS_PATCH_MARKER_END}"
@@ -2196,7 +2304,7 @@ generate_auto_themes() {
             continue
         fi
         printf '/*!%s (Auto)*/\n@import url("theme-%s.css?ver=%s") (prefers-color-scheme: light);\n@import url("theme-%s.css?ver=%s") (prefers-color-scheme: dark);\n' \
-            "$title" "$light" "$VERSION" "$dark" "$VERSION" > "${dir}/theme-${key}-auto.css"
+            "$title" "$light" "$(asset_fingerprint "${dir}/theme-${light}.css")" "$dark" "$(asset_fingerprint "${dir}/theme-${dark}.css")" > "${dir}/theme-${key}-auto.css"
         chmod 644 "${dir}/theme-${key}-auto.css"
         echo "${key}-auto"
     done <<< "$AUTO_THEME_PAIRS"
@@ -2289,6 +2397,8 @@ manage_auto_theme() {
             exit 1
             ;;
     esac
+
+    refresh_browser_asset_versions
 
     restart_proxmorph_services false
     if [[ "$owns_transaction" == "true" ]]; then commit_transaction; fi
@@ -2411,7 +2521,7 @@ apply_font() {
     chmod 644 "${live_dir}/${FONT_LIVE_NAME}"
     grep -qF "$anchor" "$INDEX_TEMPLATE" 2>/dev/null || { print_error "Font insertion point missing in $INDEX_TEMPLATE"; return 1; }
     remove_font_injection
-    local stamp=$(stat -c %Y "$FONT_CSS" 2>/dev/null || date +%s)
+    local stamp=$(asset_fingerprint "$FONT_CSS")
     local tmpblock=$(mktemp)
     printf '%s\n<link rel="stylesheet" type="text/css" href="%s/%s?v=%s">\n%s\n' \
         "$FONT_MARKER" "$web_path" "$FONT_LIVE_NAME" "$stamp" "$FONT_MARKER_END" > "$tmpblock"
@@ -2421,6 +2531,7 @@ apply_font() {
     chmod 644 "$INDEX_TEMPLATE"
     rm -f "$tmpblock"
     [[ "$PRODUCT" != PDM && -f "$INSTALLED_PATHS_FILE" ]] && record_installed_path "${live_dir}/${FONT_LIVE_NAME}"
+    refresh_browser_asset_versions
     return 0
 }
 
@@ -2512,9 +2623,10 @@ manage_font() {
         else
             print_status "Custom UI font set to system font '${family}'"
         fi
-        print_info "Reload the UI with Ctrl+Shift+R to see it"
+        print_info "Reload the UI normally to see it; the font URL is content-versioned"
     fi
 
+    refresh_browser_asset_versions
     restart_proxmorph_services false
     if [[ "$owns_transaction" == "true" ]]; then commit_transaction; fi
 }
@@ -2580,6 +2692,7 @@ BLOCK
     mv "$tmpout" "$INDEX_TEMPLATE"
     chmod 644 "$INDEX_TEMPLATE"
     rm -f "$tmpblock"
+    refresh_browser_asset_versions
     print_status "Default theme '${default_key}' injected into $(basename "$INDEX_TEMPLATE")"
 }
 
@@ -2765,6 +2878,7 @@ JSBLOCK
 
     # The block was rebuilt without the font link; put it back (if configured)
     apply_font
+    refresh_browser_asset_versions
 
     print_status "PDM themes installed — ${theme_count} theme(s)"
 }
@@ -2804,6 +2918,7 @@ PRODUCT="${PRODUCT}"
 INSTALL_DIR="${INSTALL_DIR}"
 PROXMOXLIB_JS="${PROXMOXLIB_JS}"
 WIDGET_TOOLKIT_DIR="${WIDGET_TOOLKIT_DIR}"
+THEMES_DIR="${THEMES_DIR}"
 INDEX_TEMPLATE="${INDEX_TEMPLATE}"
 PVE_MANAGER_JS="${PVE_MANAGER_JS}"
 JS_PATCHES_DIR="${JS_PATCHES_DIR}"
@@ -2851,6 +2966,10 @@ log() {
     echo "[\$(date '+%Y-%m-%d %H:%M:%S')] \$1" >> "\$LOG_FILE"
 }
 
+# Generated from the installer, so manual installs and package-update recovery
+# calculate and rewrite exactly the same content-based browser cache keys.
+$(declare -f asset_fingerprint refresh_browser_asset_versions)
+
 mkdir -p "\$(dirname "\$LOCK_FILE")"
 exec 9>"\$LOCK_FILE"
 if ! flock -n 9; then
@@ -2864,6 +2983,10 @@ if [ ! -d "\$THEMES_SOURCE" ]; then
 fi
 
 needs_repatch=false
+
+if ! refresh_browser_asset_versions --check; then
+    needs_repatch=true
+fi
 
 # PDM repatch check: see if CSS injection is still in index.hbs
 if [ "\$PRODUCT" = "PDM" ]; then
@@ -3112,7 +3235,7 @@ JSBLK
                 fi
                 cp "\$FONT_CSS" "\${PDM_THEMES_DIR}/\$FONT_LIVE_NAME"
                 chmod 644 "\${PDM_THEMES_DIR}/\$FONT_LIVE_NAME"
-                printf '%s\n<link rel="stylesheet" type="text/css" href="/proxmorph-themes/%s?v=%s">\n%s\n' "\$FONT_MARKER" "\$FONT_LIVE_NAME" "\$(stat -c %Y "\$FONT_CSS")" "\$FONT_MARKER_END" >> "\$tmpblock"
+                printf '%s\n<link rel="stylesheet" type="text/css" href="/proxmorph-themes/%s?v=%s">\n%s\n' "\$FONT_MARKER" "\$FONT_LIVE_NAME" "\$(asset_fingerprint "\$FONT_CSS")" "\$FONT_MARKER_END" >> "\$tmpblock"
                 log "Re-applied custom font for PDM"
             fi
             echo "\$PDM_CSS_MARKER_END" >> "\$tmpblock"
@@ -3208,7 +3331,7 @@ DTBLOCK
             chmod 644 "\${WIDGET_TOOLKIT_DIR}/themes/\$FONT_LIVE_NAME"
             if [ -f "\$INDEX_TEMPLATE" ] && ! grep -q "\$FONT_MARKER" "\$INDEX_TEMPLATE"; then
                 f_block=\$(mktemp)
-                printf '%s\n<link rel="stylesheet" type="text/css" href="%s/%s?v=%s">\n%s\n' "\$FONT_MARKER" "\$THEME_WEB_PATH" "\$FONT_LIVE_NAME" "\$(stat -c %Y "\$FONT_CSS")" "\$FONT_MARKER_END" > "\$f_block"
+                printf '%s\n<link rel="stylesheet" type="text/css" href="%s/%s?v=%s">\n%s\n' "\$FONT_MARKER" "\$THEME_WEB_PATH" "\$FONT_LIVE_NAME" "\$(asset_fingerprint "\$FONT_CSS")" "\$FONT_MARKER_END" > "\$f_block"
                 f_out=\$(mktemp)
                 awk -v blockfile="\$f_block" 'BEGIN{done=0; while((getline line < blockfile)>0) block=block (block?"\n":"") line} !done && /<\/head>/{print block; done=1} {print}' "\$INDEX_TEMPLATE" > "\$f_out"
                 mv "\$f_out" "\$INDEX_TEMPLATE"
@@ -3278,6 +3401,8 @@ DTBLOCK
             log "Re-applied native noVNC clipboard enhancement"
         fi
     fi  # end PVE/PBS else branch
+
+    refresh_browser_asset_versions
 
     # Protected PVE API routes execute in pvedaemon, while the browser connects
     # through pveproxy. Reload both after a Perl API patch.
@@ -4282,6 +4407,8 @@ install_themes() {
     # Re-apply custom UI font (if configured)
     apply_font
 
+    refresh_browser_asset_versions
+
     # Write version file
     record_version "$themes_source"
     
@@ -4295,7 +4422,7 @@ install_themes() {
     print_status "ProxMorph themes installed successfully!"
     echo ""
     print_info "To apply a theme:"
-    print_info "  1. Clear your browser cache (Ctrl+Shift+R)"
+    print_info "  1. Reload the UI normally (updated assets use content-versioned URLs)"
     print_info "  2. Click your username → Color Theme"
     print_info "  3. Select a ProxMorph theme from the dropdown"
     
@@ -4326,6 +4453,11 @@ install_single_theme() {
     chmod 644 "${THEMES_DIR}/$(basename "$theme_file")"
     record_installed_path "${THEMES_DIR}/$(basename "$theme_file")"
     patch_theme_map "$theme_key" "$theme_title"
+    # An active automatic theme imports this file by its own fingerprint.
+    if auto_themes_enabled; then
+        apply_auto_themes
+    fi
+    refresh_browser_asset_versions
     
     print_status "Theme '${theme_title}' installed!"
     print_info "Restarting ${PROXY_SERVICE} service in background..."

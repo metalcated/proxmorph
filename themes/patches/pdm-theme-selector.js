@@ -1,6 +1,6 @@
 /*
  * ProxMorph PDM Theme Selector Patch
- * Version: 1.0.1
+ * Version: 1.0.2
  *
  * Injects ProxMorph theme options into PDM's native Theme dialog dropdown.
  * Uses MutationObserver to detect when the dialog opens and adds custom
@@ -17,7 +17,8 @@
     var themes = [];
     for (var i = 0; i < themeLinks.length; i++) {
         var href = themeLinks[i].getAttribute('href');
-        var filename = href.split('/').pop();
+        // Cache fingerprints identify bytes, not the user's selected theme.
+        var filename = href.split(/[?#]/)[0].split('/').pop();
         // Installer passes the /*!Title*/ header as data-title; derive from the file name otherwise.
         var name = themeLinks[i].getAttribute('data-title') || filename.replace('theme-', '').replace('.css', '')
             .split('-').map(function(w) { return w.charAt(0).toUpperCase() + w.slice(1); }).join(' ');

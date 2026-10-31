@@ -240,7 +240,7 @@ check "PDM: family wins over !important rules" "1" "$(grep -c 'font-family: "Int
 check "PDM: variable-font settings reset" "1" "$(grep -c 'font-variation-settings: normal !important;' "$FONT_CSS")"
 check "PDM: one font marker block" "1" "$(grep -c '<!-- ProxMorph Font -->' "$INDEX_TEMPLATE")"
 check "PDM: link points at proxmorph-themes" "1" \
-      "$(grep -c '<link rel="stylesheet" type="text/css" href="/proxmorph-themes/proxmorph-font.css?v=[0-9]*">' "$INDEX_TEMPLATE")"
+      "$(grep -c '<link rel="stylesheet" type="text/css" href="/proxmorph-themes/proxmorph-font.css?v=[0-9a-f]*&pmver=[0-9a-f]*">' "$INDEX_TEMPLATE")"
 pdm_start="$(grep -n '<!-- ProxMorph PDM Theme -->' "$INDEX_TEMPLATE" | cut -d: -f1)"
 pdm_end="$(grep -n '<!-- /ProxMorph PDM Theme -->' "$INDEX_TEMPLATE" | cut -d: -f1)"
 font_line="$(grep -n 'proxmorph-font.css' "$INDEX_TEMPLATE" | cut -d: -f1)"
