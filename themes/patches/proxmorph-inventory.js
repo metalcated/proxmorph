@@ -13,7 +13,7 @@
  * protected API and the replicated Proxmox cluster filesystem. The selected
  * view itself continues to use Proxmox's native URL state.
  *
- * Version: 1.10.0
+ * Version: 1.10.1
  */
 (function () {
     'use strict';
@@ -24,7 +24,7 @@
     var CONNECTIVITY_VIEW_KEY = 'proxmorph-connectivity';
     var VNET_TYPE = 'proxmorph-vnet';
     var VNETS_URL = '/cluster/sdn/vnets';
-    var VERSION = '1.10.0';
+    var VERSION = '1.10.1';
     var PREFERENCES_URL = '/proxmorph/preferences';
     var MAX_INIT_ATTEMPTS = 40;
     var initAttempts = 0;
@@ -1606,6 +1606,10 @@
             return {
                 xtype: 'button',
                 itemId: 'proxmorphView-' + item.viewKey,
+                // The enclosing container does not inherit the toolbar's
+                // defaultButtonUI. Select it explicitly to avoid mixing the
+                // ordinary 30 px button UI into this compact 28 px strip.
+                ui: 'default-toolbar',
                 cls: 'x-btn-default-toolbar-small pmx-view-nav-button',
                 iconCls: item.iconCls + ' x-btn-icon-el-default-toolbar-small',
                 tooltip: navigationTooltip(item.label, item.hierarchy),

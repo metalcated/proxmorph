@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **No-write dry run**: accepts `--dry-run` before or after supported commands; validates runtime and backup integrity, resolves restore IDs, and previews planned backup/file/package/service/remote-node actions without creating even an operation lock.
 
 ### Changed
-- Bumped the customized installer version to 2.22.3, incorporating upstream 2.9.0 through `305cf71`.
+- Bumped the customized installer version to 2.22.4, incorporating upstream 2.9.0 through `305cf71`.
 - **Upstream integration**: retains authenticated inventory preferences, Enterprise Slate, noVNC, and transactional recovery. New automatic-theme and custom-font commands participate in safety backups, restore/uninstall, operation locking, no-write dry runs, and the persistent menu; compatibility remains menu option 9.
 - **OLED tooling portability**: generation works with older Debian mawk as well as modern awk.
 - **Enterprise Slate interaction palette**: reserves its darker cyan-blue for primary actions, links, meters, and deliberate hover states. Selection surfaces are now neutral blue-gray, form and keyboard focus use a slate border, and the stationary Documentation action keeps a restrained dark outline.
@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Interactive menu actions now return to the main menu after success, cancellation, or failure instead of ending the installer; command-line subcommands remain one-shot.
 
 ### Fixed
+- **Nested inventory toolbar buttons**: creates the four view shortcuts with ExtJS's native toolbar UI so inactive buttons stay 28 px tall inside their container instead of clipping their bottom borders. ESXi Light now applies its slate-toolbar foregrounds to the nested shortcuts as well as the two outer settings buttons; all six controls retain transparent surfaces and centered icons.
 - **ESXi Light navigation contrast**: uses light icons on the slate inventory toolbar, a pale accent for the active view, and light text/icons on selected object-navigation rows. The six outlined view controls remain transparent and unselected nested navigation retains its dark foreground.
 - **ESXi Light control contrast**: pairs filled buttons and dropdown arrows with a light foreground, transparent inline and secondary buttons with dark text/icons, and selected dialog tabs with dark accent text on a pale surface. Header actions retain light foregrounds and dark hover/pressed surfaces when the shared modernization layer is active.
 - **Cached installer self-copy**: compares file and directory identity when synchronizing the preferences API, installer, and cached theme assets. Running from the installed cache through relative or symlink paths no longer tries to copy an asset over itself.

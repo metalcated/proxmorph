@@ -1,9 +1,10 @@
 /*!ESXi Light*/
-/* ProxMorph ESXi Light 1.1.7
+/* ProxMorph ESXi Light 1.1.8
  * An independent ESXi/Clarity-inspired skin for the native Proxmox VE UI.
  * Layout, visibility, status glyphs and console palettes remain application-owned.
  * Clarity City fonts are embedded locally. No remote assets or layout-position overrides.
  *
+ * v1.1.8: Include the four nested inventory view buttons in the slate toolbar foregrounds.
  * v1.1.7: Light foregrounds for the slate inventory switcher and selected object navigation, scoped to their direct controls and rows.
  * v1.1.6: Keep button, arrow, inline-icon and selected-tab foregrounds paired with their light or dark surfaces under shared PVE styling.
  * v1.1.5: Standard scrollbar props only in Firefox; in Chrome they made ExtJS wrap two-column Summary/dashboard layouts to one column at non-100% display scaling
@@ -145,15 +146,18 @@ a:hover { color: var(--pm-accent-hover); }
  * Keep its six outlined buttons transparent and give the active icon a pale
  * accent that remains visible on that surface. Tokens are local to each button.
  */
-.x-box-target:has(#view) > .x-btn.x-btn-default-toolbar-small {
+.x-box-target:has(#view) > .x-btn.x-btn-default-toolbar-small,
+.x-box-target:has(#view) .pmx-view-nav .pmx-view-nav-button {
     --pm-accent: #bfe9ff;
     --proxmorph-modern-hover: transparent;
     --proxmorph-modern-selected: transparent;
 }
-.x-box-target:has(#view) > .x-btn.x-btn-default-toolbar-small .x-btn-icon-el {
+.x-box-target:has(#view) > .x-btn.x-btn-default-toolbar-small .x-btn-icon-el,
+.x-box-target:has(#view) .pmx-view-nav .pmx-view-nav-button .x-btn-icon-el {
     color: var(--pm-header-text) !important;
 }
-.x-box-target:has(#view) > .x-btn.x-btn-default-toolbar-small.x-btn-pressed .x-btn-icon-el {
+.x-box-target:has(#view) > .x-btn.x-btn-default-toolbar-small.x-btn-pressed .x-btn-icon-el,
+.x-box-target:has(#view) .pmx-view-nav .pmx-view-nav-button.x-btn-pressed .x-btn-icon-el {
     color: var(--pm-accent) !important;
 }
 

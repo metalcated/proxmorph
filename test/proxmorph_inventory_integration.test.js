@@ -457,10 +457,11 @@ assert.deepEqual(
 assert.ok(
     navigationItems.every(
         (item) =>
+            item.ui === 'default-toolbar' &&
             item.cls.includes('x-btn-default-toolbar-small') &&
             item.iconCls.includes('x-btn-icon-el-default-toolbar-small'),
     ),
-    'view buttons use the same toolbar and inner-icon styling as the surrounding controls',
+    'nested view buttons explicitly use the native toolbar UI, not ordinary-button wrappers',
 );
 assert.deepEqual(
     navigationItems.map((item) => item.margin),
