@@ -26,7 +26,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - **No-write dry run**: accepts `--dry-run` before or after supported commands; validates runtime and backup integrity, resolves restore IDs, and previews planned backup/file/package/service/remote-node actions without creating even an operation lock.
 
 ### Changed
-- Bumped the customized installer version to 2.22.1, incorporating upstream 2.9.0 through `305cf71`.
+- Bumped the customized installer version to 2.22.2, incorporating upstream 2.9.0 through `305cf71`.
 - **Upstream integration**: retains authenticated inventory preferences, Enterprise Slate, noVNC, and transactional recovery. New automatic-theme and custom-font commands participate in safety backups, restore/uninstall, operation locking, no-write dry runs, and the persistent menu; compatibility remains menu option 9.
 - **OLED tooling portability**: generation works with older Debian mawk as well as modern awk.
 - **Enterprise Slate interaction palette**: reserves its darker cyan-blue for primary actions, links, meters, and deliberate hover states. Selection surfaces are now neutral blue-gray, form and keyboard focus use a slate border, and the stationary Documentation action keeps a restrained dark outline.
@@ -38,6 +38,7 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 - Interactive menu actions now return to the main menu after success, cancellation, or failure instead of ending the installer; command-line subcommands remain one-shot.
 
 ### Fixed
+- **ESXi Light control contrast**: pairs filled buttons and dropdown arrows with a light foreground, transparent inline and secondary buttons with dark text/icons, and selected dialog tabs with dark accent text on a pale surface. Header actions retain light foregrounds and dark hover/pressed surfaces when the shared modernization layer is active.
 - **Cached installer self-copy**: compares file and directory identity when synchronizing the preferences API, installer, and cached theme assets. Running from the installed cache through relative or symlink paths no longer tries to copy an asset over itself.
 - **Large-text dialog actions**: lets text-only modal footer buttons use the full width already allocated by ExtJS, preventing actions such as **Remove** from being clipped when the account text size is 15 px while preserving compact toolbar and icon-button geometry.
 - **Enterprise Slate running-task cells**: keeps task-grid loading cells on their native dark surface instead of inverting the entire End Time and Status cells into light rectangles; tree and resource loading icons retain their dark-theme treatment.

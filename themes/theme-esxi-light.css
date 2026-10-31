@@ -1,9 +1,10 @@
 /*!ESXi Light*/
-/* ProxMorph ESXi Light 1.1.5
+/* ProxMorph ESXi Light 1.1.6
  * An independent ESXi/Clarity-inspired skin for the native Proxmox VE UI.
  * Layout, visibility, status glyphs and console palettes remain application-owned.
  * Clarity City fonts are embedded locally. No remote assets or layout-position overrides.
  *
+ * v1.1.6: Keep button, arrow, inline-icon and selected-tab foregrounds paired with their light or dark surfaces under shared PVE styling.
  * v1.1.5: Standard scrollbar props only in Firefox; in Chrome they made ExtJS wrap two-column Summary/dashboard layouts to one column at non-100% display scaling
  *         Keyboard-focused tabs keep their colors (stock focus blue made the active tab label 2.1:1)
  */
@@ -16,6 +17,8 @@
     --pm-accent-hover: #004d6e;
     --pm-accent-active: #003f5c;
     --pm-accent-soft: #c5dce8;
+    --pm-on-accent: #ffffff;
+    --pm-row-selected: #c5dce8;
     --pm-bg-base: #e3e6ed;
     --pm-bg-surface: #ccd1dc;
     --pm-bg-elevated: #eef0f5;
@@ -85,6 +88,8 @@ a:hover { color: var(--pm-accent-hover); }
 
 /* 02 / Native application header. :has targets the versioninfo anchor: id on PVE, auto id on PBS. */
 :is(.x-plain, .x-border-item):has(#versioninfo, [id^="versioninfo-"]) {
+    --proxmorph-modern-hover: var(--pm-header-hover);
+    --proxmorph-modern-selected: var(--pm-header-hover);
     background-color: var(--pm-header);
     background-image: linear-gradient(128deg, transparent 0 23%, #ffffff0d 23% 28%, transparent 28% 37%, #ffffff09 37% 41%, transparent 41%), linear-gradient(105deg, #4b6b80, #345367 72%);
     padding: 6px 12px;
@@ -101,7 +106,7 @@ a:hover { color: var(--pm-accent-hover); }
 :is(.x-plain, .x-border-item):has(#versioninfo, [id^="versioninfo-"]) .x-btn-inner,
 :is(.x-plain, .x-border-item):has(#versioninfo, [id^="versioninfo-"]) .x-btn-icon-el,
 :is(.x-plain, .x-border-item):has(#versioninfo, [id^="versioninfo-"]) .x-btn-wrap-default-small.x-btn-arrow-right::after {
-    color: var(--pm-header-text);
+    color: var(--pm-header-text) !important;
 }
 :is(.x-plain, .x-border-item):has(#versioninfo, [id^="versioninfo-"]) .x-btn-over { background: var(--pm-header-hover); border-color: #a0bfce; }
 #userinfo, .x-border-item:has([id^="versioninfo-"]) .x-btn:has(.fa-user) { background: var(--pm-header-hover) !important; border-color: #698393 !important; }
@@ -212,19 +217,21 @@ a:hover { color: var(--pm-accent-hover); }
 .x-toolbar-separator { border-color: var(--pm-border); }
 .x-btn-default-small, .x-btn-default-medium, .x-btn-default-large {
     background: var(--pm-accent);
+    color: var(--pm-on-accent);
     border-color: var(--pm-accent);
     border-radius: var(--pm-radius-sm);
 }
 .x-btn-inner-default-small, .x-btn-inner-default-medium, .x-btn-inner-default-large {
-    color: #ffffff;
+    color: var(--pm-on-accent);
     font-weight: 600;
     letter-spacing: .45px;
 }
-.x-btn-icon-el-default-small, .x-btn-icon-el-default-medium { color: #ffffff; }
+.x-btn-icon-el-default-small, .x-btn-icon-el-default-medium, .x-btn-icon-el-default-large { color: var(--pm-on-accent); }
 .x-btn-over.x-btn-default-small, .x-btn-over.x-btn-default-medium { background: var(--pm-accent-hover); border-color: var(--pm-accent-hover); }
 .x-btn-pressed.x-btn-default-small, .x-btn-menu-active.x-btn-default-small { background: var(--pm-accent-active); border-color: var(--pm-accent-active); }
 .x-btn-default-toolbar-small, .x-btn-default-toolbar-medium {
     background: var(--pm-bg-base);
+    color: var(--pm-accent);
     border-color: transparent;
     border-radius: var(--pm-radius-sm);
 }
@@ -237,8 +244,17 @@ a:hover { color: var(--pm-accent-hover); }
 .x-segmented-button .x-btn { border-radius: 0; }
 .x-segmented-button .x-segmented-button-first { border-radius: 3px 0 0 3px; }
 .x-segmented-button .x-segmented-button-last { border-radius: 0 3px 3px 0; }
-.proxmox-inline-button { color: var(--pm-accent); border-radius: 2px; }
-.proxmox-inline-button:hover { background: var(--pm-accent-soft); }
+.proxmox-inline-button { background: transparent; color: var(--pm-text); border-color: var(--pm-border-strong); border-radius: 2px; }
+.proxmox-inline-button:hover, .proxmox-inline-button.x-btn-over { background: var(--pm-accent-soft); }
+.proxmox-inline-button .x-btn-inner, .proxmox-inline-button .x-btn-icon-el { color: inherit; }
+.proxmox-inline-button.x-btn-pressed, .proxmox-inline-button.x-btn-menu-active { background: var(--pm-accent); color: var(--pm-on-accent); }
+
+/* Shared modal secondary actions are transparent in every state. */
+.pmx-inventory-secondary-action .x-btn-inner,
+.pmx-inventory-secondary-action .x-btn-icon-el,
+.pmx-inventory-secondary-action .x-btn-wrap::after {
+    color: var(--pm-accent) !important;
+}
 
 /* 08 / Forms, triggers, validation, checkboxes, fieldsets and read-only values. */
 .x-form-item-label-default, .x-form-cb-label-default { color: var(--pm-text-dim); font-size: 12px; }
@@ -392,9 +408,10 @@ a:focus-visible, button:focus-visible {
 .x-window-header-title-default { font-size: 15px; font-weight: 400; }
 .x-window .x-toolbar-footer { padding-top: 8px; padding-bottom: 8px; }
 .x-window .x-toolbar-footer .x-btn-inner { letter-spacing: .65px; font-size: 11px; text-transform: uppercase; }
-.x-window .x-tab.x-tab-active.x-tab-default { background: var(--pm-accent); box-shadow: none; border-color: var(--pm-accent); border-radius: 3px 3px 0 0; }
-.x-window .x-tab.x-tab-active.x-tab-default .x-tab-inner-default { color: #ffffff; }
-.x-keyboard-mode .x-window .x-tab.x-tab-active.x-tab-default.x-tab-focus { background: var(--pm-accent); }
+.x-window .x-tab.x-tab-active.x-tab-default { background: var(--pm-accent-soft); box-shadow: none; border-color: transparent; border-radius: 3px 3px 0 0; }
+.x-window .x-tab.x-tab-active.x-tab-default .x-tab-inner-default,
+.x-window .x-tab.x-tab-active.x-tab-default .x-tab-icon-el-default { color: var(--pm-accent); }
+.x-keyboard-mode .x-window .x-tab.x-tab-active.x-tab-default.x-tab-focus { background: var(--pm-accent-soft); }
 .x-window .x-tab-inner-default { letter-spacing: .35px; }
 .x-tree-panel .x-grid-item-selected .x-tree-icon { color: #f4f8fb; }
 .x-grid-header-ct, .x-column-header { background-image: none; }
@@ -695,8 +712,10 @@ This product may include a number of subcomponents with separate copyright notic
     border-left: 1px solid var(--pm-border-strong) !important;
 }
 .x-segmented-button > .proxmox-inline-button.x-btn-over { background: var(--pm-accent-soft); }
-.x-segmented-button > .proxmox-inline-button.x-btn-pressed { background: var(--pm-accent); }
-.x-segmented-button > .proxmox-inline-button.x-btn-pressed .x-btn-inner { color: #fff; }
+.x-segmented-button > .proxmox-inline-button.x-btn-pressed,
+.x-segmented-button > .proxmox-inline-button.x-btn-menu-active { background: var(--pm-accent); }
+.x-segmented-button > .proxmox-inline-button.x-btn-pressed .x-btn-inner,
+.x-segmented-button > .proxmox-inline-button.x-btn-menu-active .x-btn-inner { color: var(--pm-on-accent); }
 
 /* The first header control touches an overflow-clipped Ext box. Keep its
  * focus indicator inside the control instead of cutting off the outer ring. */
